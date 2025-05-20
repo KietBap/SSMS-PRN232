@@ -1,0 +1,6 @@
+@SMMS.API_HostAddress = http://localhost:5044
+
+GET {{SMMS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

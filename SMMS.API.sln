@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMMS.API", "SMMS.API\SMMS.API.csproj", "{EED8A20A-6943-403C-9F5A-C3F88A52FF86}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMMS.Domain", "SMMS.Domain\SMMS.Domain.csproj", "{38C1634C-3F61-4380-AE39-3D5EEDDCB8CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMMS.Infrastructure", "SMMS.Infrastructure\SMMS.Infrastructure.csproj", "{4B1EA91F-F0ED-458A-9F81-BC38798469F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMMS.Application", "SMMS.Application\SMMS.Application.csproj", "{FEB29230-3897-47FE-8E9E-097A09C78B49}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EED8A20A-6943-403C-9F5A-C3F88A52FF86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EED8A20A-6943-403C-9F5A-C3F88A52FF86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EED8A20A-6943-403C-9F5A-C3F88A52FF86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EED8A20A-6943-403C-9F5A-C3F88A52FF86}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38C1634C-3F61-4380-AE39-3D5EEDDCB8CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38C1634C-3F61-4380-AE39-3D5EEDDCB8CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38C1634C-3F61-4380-AE39-3D5EEDDCB8CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38C1634C-3F61-4380-AE39-3D5EEDDCB8CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B1EA91F-F0ED-458A-9F81-BC38798469F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B1EA91F-F0ED-458A-9F81-BC38798469F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B1EA91F-F0ED-458A-9F81-BC38798469F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B1EA91F-F0ED-458A-9F81-BC38798469F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FEB29230-3897-47FE-8E9E-097A09C78B49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEB29230-3897-47FE-8E9E-097A09C78B49}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FEB29230-3897-47FE-8E9E-097A09C78B49}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FEB29230-3897-47FE-8E9E-097A09C78B49}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
