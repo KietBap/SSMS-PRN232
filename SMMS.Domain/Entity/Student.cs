@@ -16,7 +16,7 @@ namespace SMMS.Domain.Entity
         public string ClassId { get; set; }
 
         [ForeignKey("ClassId")]
-        public virtual Class Class { get; set; }
+        public virtual SchoolClass SchoolClass { get; set; }
 
         public string FullName { get; set; }
         public string Gender { get; set; }

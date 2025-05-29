@@ -2,7 +2,7 @@
 
 namespace SMMS.Domain.Entity
 {
-    public class Class : BaseEntity
+    public class SchoolClass : BaseEntity
     {
         public string ClassName { get; set; }
         public string ClassRoom { get; set; }
