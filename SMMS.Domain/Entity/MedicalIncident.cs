@@ -18,7 +18,7 @@ namespace SMMS.Domain.Entity
         [ForeignKey("UserId")]
         public virtual User User { get; set; }
 
-        public string Type { get; set; }
+        public string Type { get; set; }  //Pending, Handled, Cancelled 
         public string Description { get; set; }
         public string Status { get; set; }
         public DateTime IncidentDate { get; set; }

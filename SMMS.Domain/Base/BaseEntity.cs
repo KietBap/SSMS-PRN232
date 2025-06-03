@@ -8,6 +8,7 @@ namespace SMMS.Domain.Base
         {
             Id = Guid.NewGuid().ToString("N");
             CreatedTime = DateTime.Now;
+            LastUpdatedTime = DateTime.Now;
         }
 
         [Key]
