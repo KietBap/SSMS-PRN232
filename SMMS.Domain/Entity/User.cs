@@ -18,8 +18,9 @@ namespace SMMS.Domain.Entity
         public string FullName { get; set; }
         public string? Image { get; set; }
 
-        public virtual ICollection<Otp> Otps { get; set; }
-        public virtual ICollection<Notification> Notifications { get; set; }
+
+		public virtual ICollection<Otp> Otps { get; set; }
+		public virtual ICollection<Notification> Notifications { get; set; }
         public virtual ICollection<Blog> Blogs { get; set; }
         public virtual ICollection<Student> Students { get; set; }
         public virtual ICollection<ActivityConsent> ActivityConsents { get; set; }

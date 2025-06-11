@@ -26,6 +26,7 @@ namespace SMMS.Application.Helpers.Implements
 				new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
 				new Claim(ClaimTypes.Role, user.Role.RoleName)
 			};
+			Console.WriteLine(user.Role.RoleName);
 
 			var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtSettings:Secret"]));
 			var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

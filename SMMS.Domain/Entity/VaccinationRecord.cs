@@ -17,8 +17,8 @@ namespace SMMS.Domain.Entity
 
         [ForeignKey("VaccinationCampaignId")]
         public virtual VaccinationCampaign VaccinationCampaign { get; set; }
-
         public string ResultNote { get; set; }
-        public DateTime VaccinatedAt { get; set; }
+        public DateTime Time { get; set; }
+		public DateTime VaccinatedAt { get; set; }
     }
 }

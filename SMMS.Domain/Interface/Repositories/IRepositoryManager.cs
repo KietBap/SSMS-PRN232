@@ -6,6 +6,7 @@ namespace SMMS.Domain.Interface.Repositories
 		IBlogRepository BlogRepository { get; }
 		IClassRepository ClassRepository { get; }
 		IConselingRepository ConselingRepository { get; }
+		IConsentRepository ConsentRepository { get; }
 		IDocumentRepository DocumentRepository { get; }
 		IHealthActivityRepository HealthActivityRepository { get; }
 		IHealthCheckupRepository HealthCheckRepository { get; }

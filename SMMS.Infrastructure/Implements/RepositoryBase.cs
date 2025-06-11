@@ -26,14 +26,20 @@ namespace SMMS.Infrastructure.Implements
 
 		public IQueryable<T> FindAll(bool trackChanges)
 		{
-			if (!trackChanges) return _context.Set<T>().AsNoTracking();
-			return _context.Set<T>();
+			/*if (!trackChanges) return _context.Set<T>().AsNoTracking();
+			return _context.Set<T>();*/
+			var query = _context.Set<T>().Where(e => EF.Property<DateTimeOffset?>(e, "DeletedTime") == null);
+			return trackChanges ? query : query.AsNoTracking();
 		}
 
 		public IQueryable<T> FindByCondition(Expression<Func<T, bool>> expression, bool trackChanges)
 		{
-			if (!trackChanges) return _context.Set<T>().Where(expression).AsNoTracking();
-			return _context.Set<T>().Where(expression);
+			/*if (!trackChanges) return _context.Set<T>().Where(expression).AsNoTracking();
+			return _context.Set<T>().Where(expression);*/
+			var query = _context.Set<T>()
+			.Where(e => EF.Property<DateTimeOffset?>(e, "DeletedTime") == null)
+			.Where(expression);
+			return trackChanges ? query : query.AsNoTracking();
 		}
 
 		public void Update(T entity)

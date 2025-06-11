@@ -23,7 +23,8 @@ namespace SMMS.Domain.Entity
         public string Dental { get; set; }
         public double BMI { get; set; }
         public string AbnormalNote { get; set; }
-        public DateTime RecordDate { get; set; }
+        public DateTime Time { get; set; }
+		public DateTime RecordDate { get; set; }
         public bool IsLatest { get; set; }
 
         public virtual ICollection<ConselingSchedule> ConselingSchedules { get; set; }

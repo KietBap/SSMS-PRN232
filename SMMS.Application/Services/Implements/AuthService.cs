@@ -75,11 +75,11 @@ namespace SMMS.Application.Services.Implements
 				throw new Exception("Invalid credentials");
 			}
 			Console.WriteLine($"User found: {user.Id}, Role: {user.Role?.RoleName}");
-			if (user.Role.RoleName == "User")
-			{
-				Console.WriteLine("User role is 'User'");
-				throw new Exception("Invalid credentials");
-			}
+			//if (user.Role.RoleName == "Parent")
+			//{
+			//	Console.WriteLine("Parent Cannot Login With Email Or Password");
+			//	throw new Exception("Parent Cannot Login With Email Or Password");
+			//}
 			var passwordVerified = BCrypt.Net.BCrypt.Verify(password, user.Password);
 			Console.WriteLine($"Password verified: {passwordVerified}");
 			if (!passwordVerified)

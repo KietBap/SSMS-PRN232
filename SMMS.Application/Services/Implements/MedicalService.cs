@@ -484,5 +484,453 @@ namespace SMMS.Application.Services.Implements
         }
 
 
+        //-----------------------------------------Medical Request------------------------------------------------
+
+        public async Task<bool> CreateMedicalRequestAsync(string userId, CreateMedicalRequestRequest request)
+        {
+            try
+            {
+                var medicalRequest = new MedicalRequest
+                {
+                    StudentId = request.StudentId,
+                    ParentId = request.ParentId,
+                    UserId = userId,
+                    MedicalName = request.MedicalName,
+                    StartTime = request.StartTime,
+                    EndTime = request.EndTime,
+                    Quantity = request.Quantity,
+                    Dosage = request.Dosage,
+                    Notes = request.Notes,
+                    Status = "Active",
+                    IsCompletedToday = false,
+                    CreatedTime = DateTime.Now,
+                    CreatedBy = userId,
+                };
+
+                _repositoryManager.MedicalRequestRepository.Create(medicalRequest);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<List<ListMedicalRequestResponse>> GetAllMedicalRequestsAsync()
+        {
+            try
+            {
+                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Select(mr => new ListMedicalRequestResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student.FullName,
+                        Class = mr.Student.SchoolClass.ClassName,
+                        MedicalName = mr.MedicalName,
+                        Status = mr.Status,
+                        StartTime = mr.StartTime,
+                        EndTime = mr.EndTime,
+                        Dosage = mr.Dosage,
+                        IsCompletedToday = mr.IsCompletedToday,
+                        LastCompletedDate = mr.LastCompletedDate
+                    }).ToList();
+
+                return medicalRequests;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<MedicalRequestResponse> GetMedicalRequestByIdAsync(string id)
+        {
+            try
+            {
+                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Include(mr => mr.Parent)
+                    .Include(mr => mr.User)
+                    .FirstOrDefault();
+
+                if (medicalRequest == null)
+                {
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+                }
+
+                return new MedicalRequestResponse
+                {
+                    Id = medicalRequest.Id,
+                    StudentId = medicalRequest.StudentId,
+                    StudentName = medicalRequest.Student?.FullName ?? "N/A",
+                    Class = medicalRequest.Student?.SchoolClass?.ClassName ?? "N/A",
+                    ParentId = medicalRequest.ParentId,
+                    ParentName = medicalRequest.Parent?.FullName ?? "N/A",
+                    UserId = medicalRequest.UserId,
+                    NurseName = medicalRequest.User?.FullName ?? "N/A",
+                    MedicalName = medicalRequest.MedicalName,
+                    Status = medicalRequest.Status,
+                    StartTime = medicalRequest.StartTime,
+                    EndTime = medicalRequest.EndTime,
+                    Quantity = medicalRequest.Quantity,
+                    Dosage = medicalRequest.Dosage,
+                    Notes = medicalRequest.Notes,
+                    CreatedTime = medicalRequest.CreatedTime,
+                    LastCompletedDate = medicalRequest.LastCompletedDate,
+                    IsCompletedToday = medicalRequest.IsCompletedToday
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> UpdateMedicalRequestAsync(string id, UpdateMedicalRequestRequest request, string userId)
+        {
+            try
+            {
+                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
+                    .FirstOrDefault();
+
+                if (medicalRequest == null)
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+
+                medicalRequest.MedicalName = request.MedicalName;
+                medicalRequest.StartTime = request.StartTime;
+                medicalRequest.EndTime = request.EndTime;
+                medicalRequest.Quantity = request.Quantity;
+                medicalRequest.Dosage = request.Dosage;
+                medicalRequest.Notes = request.Notes;
+                medicalRequest.LastUpdatedBy = userId;
+                medicalRequest.LastUpdatedTime = DateTime.Now;
+
+                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> DeleteMedicalRequestAsync(string id, string userId)
+        {
+            try
+            {
+                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
+                    .FirstOrDefault();
+
+                if (medicalRequest == null)
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+
+                medicalRequest.DeletedTime = DateTimeOffset.Now;
+                medicalRequest.DeletedBy = userId;
+
+                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<List<DailyMedicalRequestResponse>> GetDailyMedicalRequestsAsync(DateTime date)
+        {
+            try
+            {
+                // Chỉ lấy phần ngày, bỏ qua thời gian cụ thể
+                var targetDate = date.Date;
+
+                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue &&
+                                          m.StartTime.Date <= targetDate &&
+                                          m.EndTime.Date >= targetDate &&
+                                          m.Status == "Active", false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Select(mr => new DailyMedicalRequestResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student.FullName,
+                        Class = mr.Student.SchoolClass.ClassName,
+                        MedicalName = mr.MedicalName,
+                        Dosage = mr.Dosage,
+                        Quantity = mr.Quantity,
+                        IsCompleted = mr.IsCompletedToday && mr.LastCompletedDate.HasValue &&
+                                     mr.LastCompletedDate.Value.Date == targetDate,
+                        CompletedTime = mr.LastCompletedDate.HasValue &&
+                                       mr.LastCompletedDate.Value.Date == targetDate ?
+                                       mr.LastCompletedDate : null,
+                        Status = mr.Status,
+                        Notes = mr.Notes
+                    }).ToList();
+
+                return medicalRequests;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> CompleteMedicalRequestAsync(string id, string userId)
+        {
+            try
+            {
+                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
+                    .FirstOrDefault();
+
+                if (medicalRequest == null)
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+
+                var now = DateTime.Now;
+
+                // Kiểm tra xem đã complete hôm nay chưa
+                if (medicalRequest.LastCompletedDate.HasValue &&
+                    medicalRequest.LastCompletedDate.Value.Date == now.Date)
+                {
+                    throw new InvalidOperationException("Medical request has already been completed today.");
+                }
+
+                medicalRequest.IsCompletedToday = true;
+                medicalRequest.LastCompletedDate = now;
+                medicalRequest.LastUpdatedBy = userId;
+                medicalRequest.LastUpdatedTime = DateTimeOffset.Now;
+
+                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> UpdateMedicalRequestStatusAsync(string id, string status, string userId)
+        {
+            try
+            {
+                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
+                    .FirstOrDefault();
+
+                if (medicalRequest == null)
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+
+                medicalRequest.Status = status;
+                medicalRequest.LastUpdatedBy = userId;
+                medicalRequest.LastUpdatedTime = DateTime.Now;
+
+                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByStudentAsync(string studentId)
+        {
+            try
+            {
+                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue && m.StudentId == studentId, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Select(mr => new ListMedicalRequestResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student.FullName,
+                        Class = mr.Student.SchoolClass.ClassName,
+                        MedicalName = mr.MedicalName,
+                        Status = mr.Status,
+                        StartTime = mr.StartTime,
+                        EndTime = mr.EndTime,
+                        Dosage = mr.Dosage,
+                        IsCompletedToday = mr.IsCompletedToday,
+                        LastCompletedDate = mr.LastCompletedDate
+                    }).ToList();
+
+                return medicalRequests;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByStatusAsync(string status)
+        {
+            try
+            {
+                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue && m.Status == status, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Select(mr => new ListMedicalRequestResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student.FullName,
+                        Class = mr.Student.SchoolClass.ClassName,
+                        MedicalName = mr.MedicalName,
+                        Status = mr.Status,
+                        StartTime = mr.StartTime,
+                        EndTime = mr.EndTime,
+                        Dosage = mr.Dosage,
+                        IsCompletedToday = mr.IsCompletedToday,
+                        LastCompletedDate = mr.LastCompletedDate
+                    }).ToList();
+
+                return medicalRequests;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<List<ListMedicalRequestResponse>> SearchMedicalRequestsAsync(string? medicalName, string? studentId, DateTime? date, string? status)
+        {
+            try
+            {
+                var query = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .AsQueryable();
+
+                if (!string.IsNullOrEmpty(medicalName))
+                {
+                    query = query.Where(m => m.MedicalName.Contains(medicalName));
+                }
+
+                if (!string.IsNullOrEmpty(studentId))
+                {
+                    query = query.Where(m => m.StudentId == studentId);
+                }
+
+                if (date.HasValue)
+                {
+                    var targetDate = date.Value.Date;
+                    query = query.Where(m => m.StartTime.Date <= targetDate && m.EndTime.Date >= targetDate);
+                }
+
+                if (!string.IsNullOrEmpty(status))
+                {
+                    query = query.Where(m => m.Status == status);
+                }
+
+                var medicalRequests = query
+                    .Select(mr => new ListMedicalRequestResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student.FullName,
+                        Class = mr.Student.SchoolClass.ClassName,
+                        MedicalName = mr.MedicalName,
+                        Status = mr.Status,
+                        StartTime = mr.StartTime,
+                        EndTime = mr.EndTime,
+                        Dosage = mr.Dosage,
+                        IsCompletedToday = mr.IsCompletedToday,
+                        LastCompletedDate = mr.LastCompletedDate
+                    }).ToList();
+
+                return medicalRequests;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> ResetDailyCompletionStatusAsync()
+        {
+            try
+            {
+                var today = DateTime.Today;
+                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue &&
+                                          m.IsCompletedToday &&
+                                          m.LastCompletedDate.HasValue &&
+                                          m.LastCompletedDate.Value.Date < today, true)
+                    .ToList();
+
+                foreach (var request in medicalRequests)
+                {
+                    request.IsCompletedToday = false;
+                }
+
+                if (medicalRequests.Any())
+                {
+                    await _repositoryManager.SaveAsync();
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<object> GetCompletionStatusByDateAsync(DateTime date)
+        {
+            try
+            {
+                var targetDate = date.Date;
+
+                var totalRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue &&
+                                          m.StartTime.Date <= targetDate &&
+                                          m.EndTime.Date >= targetDate &&
+                                          m.Status == "Active", false)
+                    .Count();
+
+                var completedRequests = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue &&
+                                          m.StartTime.Date <= targetDate &&
+                                          m.EndTime.Date >= targetDate &&
+                                          m.Status == "Active" &&
+                                          m.LastCompletedDate.HasValue &&
+                                          m.LastCompletedDate.Value.Date == targetDate, false)
+                    .Count();
+
+                return new
+                {
+                    Date = targetDate,
+                    TotalRequests = totalRequests,
+                    CompletedRequests = completedRequests,
+                    PendingRequests = totalRequests - completedRequests,
+                    CompletionRate = totalRequests > 0 ? (double)completedRequests / totalRequests * 100 : 0
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+
     }
 }
