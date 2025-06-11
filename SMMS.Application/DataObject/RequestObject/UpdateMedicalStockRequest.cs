@@ -1,4 +1,6 @@
-﻿namespace SMMS.Application.DataObject.RequestObject
+﻿using SMMS.Domain.Enum;
+
+namespace SMMS.Application.DataObject.RequestObject
 {
     public class UpdateMedicalStockRequest
     {
@@ -6,6 +8,6 @@
         public int Quantity { get; set; }
         public DateTime ExpiryDate { get; set; }
         public string DetailInformation { get; set; }
-        public string Status { get; set; }
+        public MedicalStockStatus Status { get; set; }
     }
 }

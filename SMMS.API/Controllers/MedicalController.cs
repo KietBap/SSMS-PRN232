@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SMMS.Application.DataObject.RequestObject;
 using SMMS.Application.Services.Interfaces;
 using SMMS.Domain.Entity;
+using SMMS.Domain.Enum;
 using System.Security.Claims;
 
 namespace SMMS.API.Controllers
@@ -121,6 +122,15 @@ namespace SMMS.API.Controllers
             var result = await _medicalService.UpdateMedicalIncidentAsync(id, request, userId);
             if (!result) return BadRequest("Failed to update medical incident.");
             return Ok("MedicalIncident updated successfully.");
+        }
+
+        [HttpPatch("incident/status/{id}")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> UpdateIncidentStatus(string id, MedicalIncidentStatus status)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _medicalService.UpdateIncidentStatusAsync(id, status, userId);
+            return Ok(result);
         }
 
 

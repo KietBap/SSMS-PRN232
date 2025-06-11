@@ -3,6 +3,7 @@ using SMMS.Application.DataObject.RequestObject;
 using SMMS.Application.DataObject.ResponseObject;
 using SMMS.Application.Services.Interfaces;
 using SMMS.Domain.Entity;
+using SMMS.Domain.Enum;
 using SMMS.Domain.Interface.Repositories;
 
 namespace SMMS.Application.Services.Implements
@@ -30,7 +31,7 @@ namespace SMMS.Application.Services.Implements
                     DetailInformation = request.DetailInformation,
                     Quantity = request.Quantity,
                     ExpiryDate = request.ExpiryDate,
-                    Status = "available",
+                    Status = MedicalStockStatus.Available,
                     CreatedTime = DateTime.Now,
                     CreatedBy = userId,
                 };
@@ -112,6 +113,7 @@ namespace SMMS.Application.Services.Implements
                     DetailInformation = u.DetailInformation,
                     ExpiryDate = u.ExpiryDate,
                     Quantity = u.Quantity,
+                    Status = u.Status,
                 }).ToList();
 
                 return medicalstocks;
@@ -169,7 +171,7 @@ namespace SMMS.Application.Services.Implements
                     Type = request.Type,
                     Description = request.Description,
                     IncidentDate = request.IncidentDate,
-                    Status = "Pending",
+                    Status = MedicalIncidentStatus.Pending,
                     CreatedTime = DateTime.Now,
                     CreatedBy = userId,
                 };
@@ -324,6 +326,33 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
+        public async Task<bool> UpdateIncidentStatusAsync(string id, MedicalIncidentStatus status ,string userId)
+        {
+            try
+            {
+                var incident = _repositoryManager.MedicalIncidentRepository
+                    .FindByCondition(i => i.Id == id && !i.DeletedTime.HasValue, true)
+                    .FirstOrDefault();
+
+                if (incident == null)
+                {
+                    throw new Exception("Can not found MedicalIncident or is deleted");
+                }
+
+                incident.Status = status;
+                incident.LastUpdatedBy = userId;
+                incident.LastUpdatedTime = DateTime.Now;
+
+                _repositoryManager.MedicalIncidentRepository .Update(incident);
+                await _repositoryManager.SaveAsync();
+
+                return true;
+            }
+            catch(Exception ex) { 
+                throw new Exception(ex.Message);
+            }
+        }
+
 
         //-----------------------------------------Medical Usage------------------------------------------------
 
@@ -352,7 +381,7 @@ namespace SMMS.Application.Services.Implements
                 stock.Quantity -= detail.Quantity;
                 if (stock.Quantity == 0)
                 {
-                    stock.Status = "out of stock";
+                    stock.Status = MedicalStockStatus.OutOfStock;
                 }
 
                 // Tạo MedicalUsage mới
@@ -426,7 +455,7 @@ namespace SMMS.Application.Services.Implements
 
                 oldStock.Quantity += medicalUsage.Quantity;
                 if (oldStock.Quantity > 0)
-                    oldStock.Status = "available";
+                    oldStock.Status = MedicalStockStatus.Available;
 
                 oldStock.LastUpdatedBy = userId;
                 oldStock.LastUpdatedTime = DateTime.Now;
@@ -446,7 +475,7 @@ namespace SMMS.Application.Services.Implements
                         throw new InvalidOperationException($"Thuốc '{newStock.Name}' không đủ số lượng. Còn lại: {newStock.Quantity}");
 
                     newStock.Quantity -= model.Quantity;
-                    newStock.Status = newStock.Quantity == 0 ? "out of stock" : "available";
+                    newStock.Status = newStock.Quantity == 0 ? MedicalStockStatus.OutOfStock : MedicalStockStatus.Available;
                     newStock.LastUpdatedBy = userId;
                     newStock.LastUpdatedTime = DateTime.Now;
 
@@ -462,7 +491,7 @@ namespace SMMS.Application.Services.Implements
                         throw new InvalidOperationException($"Thuốc '{oldStock.Name}' không đủ số lượng. Còn lại: {oldStock.Quantity}");
 
                     oldStock.Quantity -= model.Quantity;
-                    oldStock.Status = oldStock.Quantity == 0 ? "out of stock" : "available";
+                    oldStock.Status = oldStock.Quantity == 0 ? MedicalStockStatus.OutOfStock : MedicalStockStatus.Available;
                     oldStock.LastUpdatedBy = userId;
                     oldStock.LastUpdatedTime = DateTime.Now;
 

@@ -1,5 +1,6 @@
 ﻿using SMMS.Application.DataObject.RequestObject;
 using SMMS.Application.DataObject.ResponseObject;
+using SMMS.Domain.Enum;
 
 namespace SMMS.Application.Services.Interfaces
 {
@@ -19,6 +20,7 @@ namespace SMMS.Application.Services.Interfaces
         Task<MedicalIncidentResponse> GetMedicalIncidentByIdAsync(string id);
         Task<List<ListMedicalIncidentResponse>> GetAllMedicalIncidentAsync(string? studentId = null);
         Task<bool> UpdateMedicalIncidentAsync(string id, UpdateMedicalIncidentRequest model, string userId);
+        Task<bool> UpdateIncidentStatusAsync(string id, MedicalIncidentStatus status, string userId);
 
 
         //---------------Medical Usage----------------
