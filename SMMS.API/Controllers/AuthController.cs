@@ -57,5 +57,21 @@ namespace SMMS.API.Controllers
 			var response = await _authService.LoginAsync(request.Email, request.Password);
 			return Ok(response);
 		}
-	}
+
+        [HttpPost("verify-phonenumber")]
+        public async Task<IActionResult> VerifyPhoneNumber(VerifyPhoneRequest request)
+        {
+            var checker = await _authService.VerifyPhoneNumberAsync(request);
+
+            return Ok(checker);
+        }
+
+        [HttpPost("create-account")]
+        public async Task<IActionResult> CreateAccount(CreateAccountModelView model)
+        {
+            var checker = await _authService.CreateAccountOtpAsync(model);
+
+            return Ok(checker);
+        }
+    }
 }
