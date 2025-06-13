@@ -25,6 +25,14 @@ namespace SMMS.Application.Services.Implements
 		{
             try
             {
+                var stock = _repositoryManager.MedicalStockRepository
+                    .FindByCondition(s => s.Name == request.Name && !s.DeletedTime.HasValue, false)
+                    .FirstOrDefault();
+
+                if (stock == null) {
+                    throw new Exception("Stock is already exist");
+                }
+
                 var medicalStock = new MedicalStock
                 {
                     Name = request.Name,
