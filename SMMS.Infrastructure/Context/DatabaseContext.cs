@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SMMS.Domain.Entity;
-using BCrypt.Net;
+using SMMS.Domain.Enum;
 
 namespace SMMS.Infrastructure.Context
 {
@@ -13,12 +13,12 @@ namespace SMMS.Infrastructure.Context
         public virtual DbSet<Blog> Blog { get; set; }
         public virtual DbSet<SchoolClass> SchoolClass { get; set; }
         public virtual DbSet<ConselingSchedule> ConselingSchedule { get; set; }
-        public virtual DbSet<Document> Document { get; set; }
         public virtual DbSet<HealthActivity> HealthActivity { get; set; }
         public virtual DbSet<HealthCheckupRecord> HealthCheckupRecord { get; set; }
         public virtual DbSet<HealthProfile> HealthProfile { get; set; }
         public virtual DbSet<MedicalIncident> MedicalIncident { get; set; }
         public virtual DbSet<MedicalRequest> MedicalRequest { get; set; }
+        public virtual DbSet<MedicationRequestAdministration> MedicationRequestAdministration { get; set; }
         public virtual DbSet<MedicalStock> MedicalStock { get; set; }
         public virtual DbSet<MedicalUsage> MedicalUsage { get; set; }
         public virtual DbSet<Notification> Notification { get; set; }
@@ -26,9 +26,10 @@ namespace SMMS.Infrastructure.Context
         public virtual DbSet<Student> Student { get; set; }
         public virtual DbSet<VaccinationCampaign> VaccinationCampaign { get; set; }
         public virtual DbSet<VaccinationRecord> VaccinationRecord { get; set; }
-        public virtual DbSet<Otp> Otps { get; set; }
+		public virtual DbSet<HealthActivityClass> HealthActivityClasses { get; set; }
+		public virtual DbSet<VaccinationCampaignClass> VaccinationCampaignClasses { get; set; }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+		protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // User - Role (N-1)
             modelBuilder.Entity<User>()
@@ -63,9 +64,17 @@ namespace SMMS.Infrastructure.Context
                     .HasForeignKey(ur => ur.ClassId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
+			modelBuilder.Entity<Student>()
+				.Property(s => s.StudentNumber)
+                .UseIdentityColumn() // Sử dụng UseIdentityColumn để tạo cột tự tăng
+				.ValueGeneratedOnAdd(); // Đặt StudentNumber là cột tự tăng (identity)
 
-            // HealthProfile - Student (N-1)
-            modelBuilder.Entity<HealthProfile>()
+			modelBuilder.Entity<Student>()
+				.Property(s => s.StudentCode)
+				.HasComputedColumnSql("'STD' + CAST([StudentNumber] AS VARCHAR(10))");
+
+			// HealthProfile - Student (N-1)
+			modelBuilder.Entity<HealthProfile>()
                 .HasOne(w => w.Student)
                 .WithMany(u => u.HealthProfiles)
                 .HasForeignKey(w => w.StudentId)
@@ -94,16 +103,18 @@ namespace SMMS.Infrastructure.Context
                 AC.HasOne(ur => ur.VaccinationCampaign)
                     .WithMany(r => r.ActivityConsents)
                     .HasForeignKey(ur => ur.VaccinationCampaignId)
-                    .OnDelete(DeleteBehavior.Restrict);
-                AC.HasOne(ur => ur.User)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired(false); // Explicitly nullable
+				AC.HasOne(ur => ur.User)
                     .WithMany(r => r.ActivityConsents)
                     .HasForeignKey(ur => ur.UserId)
                     .OnDelete(DeleteBehavior.Restrict);
                 AC.HasOne(ur => ur.HealthActivity)
                     .WithMany(r => r.ActivityConsents)
                     .HasForeignKey(ur => ur.HealthActivityId)
-                    .OnDelete(DeleteBehavior.Restrict);
-            });
+                    .OnDelete(DeleteBehavior.Restrict)
+					.IsRequired(false); // Explicitly nullable
+			});
 
             // HealthActivity - User (N-1)
             modelBuilder.Entity<HealthActivity>()
@@ -185,29 +196,50 @@ namespace SMMS.Infrastructure.Context
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            modelBuilder.Entity<Otp>(entity =>
+            // MedicationRequestAdministration - MedicalRequest, User (N-1)
+            modelBuilder.Entity<MedicationRequestAdministration>(mra =>
             {
-                entity.HasKey(e => e.Id);
-
-                entity.HasOne(o => o.User)
-                    .WithMany(u => u.Otps)
-                    .HasForeignKey(o => o.UserId)
-                    .OnDelete(DeleteBehavior.SetNull); // Changed from Cascade to SetNull
-
-                entity.Property(e => e.PhoneNumber).IsRequired().HasMaxLength(15);
-                entity.Property(e => e.OtpCode).IsRequired().HasMaxLength(6);
-                entity.Property(e => e.ExpirationTime).IsRequired();
-                entity.Property(e => e.IsUsed).IsRequired();
-                entity.Property(e => e.UserId).IsRequired(false); // Explicitly nullable
+                mra.HasOne(ur => ur.MedicalRequest)
+                    .WithMany(u => u.MedicationRequestAdministrations)
+                    .HasForeignKey(ur => ur.MedicalRequestId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                mra.HasOne(ur => ur.Administrator)
+                    .WithMany()
+                    .HasForeignKey(ur => ur.AdministeredBy)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
-            //===================================================Seed data================================================================
 
-            //role
-            var roleIdAdmin = Guid.NewGuid().ToString();
+			modelBuilder.Entity<HealthActivityClass>()
+			.HasOne(hac => hac.HealthActivity)
+			.WithMany(ha => ha.HealthActivityClasses)
+			.HasForeignKey(hac => hac.HealthActivityId)
+			.OnDelete(DeleteBehavior.Restrict);
+
+			modelBuilder.Entity<HealthActivityClass>()
+				.HasOne(hac => hac.SchoolClass)
+				.WithMany()
+				.HasForeignKey(hac => hac.SchoolClassId)
+				.OnDelete(DeleteBehavior.Restrict);
+
+			modelBuilder.Entity<VaccinationCampaignClass>()
+				.HasOne(vcc => vcc.VaccinationCampaign)
+				.WithMany(vc => vc.VaccinationCampaignClasses)
+				.HasForeignKey(vcc => vcc.VaccinationCampaignId)
+				.OnDelete(DeleteBehavior.Restrict);
+
+			modelBuilder.Entity<VaccinationCampaignClass>()
+				.HasOne(vcc => vcc.SchoolClass)
+				.WithMany()
+				.HasForeignKey(vcc => vcc.SchoolClassId)
+				.OnDelete(DeleteBehavior.Restrict);
+			//===================================================Seed data================================================================
+
+			//role
+			var roleIdAdmin = Guid.NewGuid().ToString();
             var roleIdNurse = Guid.NewGuid().ToString();
             var roleIdManager = Guid.NewGuid().ToString();
-            var roleIdParent = Guid.NewGuid().ToString();
-            modelBuilder.Entity<Role>().HasData(
+			var roleIdParent = Guid.NewGuid().ToString();
+			modelBuilder.Entity<Role>().HasData(
                 new Role
                 {
                     Id = roleIdAdmin,
@@ -231,21 +263,21 @@ namespace SMMS.Infrastructure.Context
                     CreatedTime = DateTimeOffset.UtcNow,
                     LastUpdatedTime = DateTimeOffset.UtcNow
                 },
-                new Role
-                {
-                    Id = roleIdParent,
-                    RoleName = "Parent",
-                    CreatedBy = "System",
-                    CreatedTime = DateTimeOffset.UtcNow,
-                    LastUpdatedTime = DateTimeOffset.UtcNow
-                });
+			    new Role
+			    {
+				    Id = roleIdParent,
+				    RoleName = "Parent",
+				    CreatedBy = "System",
+				    CreatedTime = DateTimeOffset.UtcNow,
+				    LastUpdatedTime = DateTimeOffset.UtcNow
+			    });
 
-            // user
-            var adminId = Guid.NewGuid().ToString();
+			// user
+			var adminId = Guid.NewGuid().ToString();
             var nurseId = Guid.NewGuid().ToString();
             var managerId = Guid.NewGuid().ToString();
-            var parentId = Guid.NewGuid().ToString();
-            modelBuilder.Entity<User>().HasData(
+			var parentId = Guid.NewGuid().ToString();
+			modelBuilder.Entity<User>().HasData(
                 new User
                 {
                     Id = adminId,
@@ -279,17 +311,209 @@ namespace SMMS.Infrastructure.Context
                     CreatedBy = "SeedData",
                     CreatedTime = DateTimeOffset.UtcNow,
                 },
-                new User
-                {
-                    Id = parentId,
-                    RoleId = roleIdParent,
-                    Email = "parent@gmail.com",
-                    FullName = "KietBap",
-                    Phone = "0987051234",
-                    Password = BCrypt.Net.BCrypt.HashPassword("123"),
-                    CreatedBy = "SeedData",
-                    CreatedTime = DateTimeOffset.UtcNow
-                });
-        }
+			    new User
+			    {
+				    Id = parentId,
+				    RoleId = roleIdParent,
+				    Email = "parent@gmail.com",
+				    FullName = "KietBap",
+				    Phone = "0987051234",
+				    Password = BCrypt.Net.BCrypt.HashPassword("123"),
+				    CreatedBy = "SeedData",
+				    CreatedTime = DateTimeOffset.UtcNow
+			    });
+			// SchoolClass
+			var classId1 = Guid.NewGuid().ToString();
+			var classId2 = Guid.NewGuid().ToString();
+			modelBuilder.Entity<SchoolClass>().HasData(
+				new SchoolClass
+				{
+					Id = classId1,
+					ClassName = "Class 10A",
+					ClassRoom = "Room 101",
+					Quantity = 30,
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				},
+				new SchoolClass
+				{
+					Id = classId2,
+					ClassName = "Class 10B",
+					ClassRoom = "Room 102",
+					Quantity = 28,
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				});
+
+			// Student
+			var studentId1 = Guid.NewGuid().ToString();
+			var studentId2 = Guid.NewGuid().ToString();
+			modelBuilder.Entity<Student>().HasData(
+				new Student
+				{
+					Id = studentId1,
+					ParentId = parentId,
+					ClassId = classId1,
+					FullName = "Nguyen Van A",
+					Gender = "Male",
+					DateOfBirth = new DateTime(2010, 5, 15),
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				},
+				new Student
+				{
+					Id = studentId2,
+					ParentId = parentId,
+					ClassId = classId2,
+					FullName = "Tran Thi B",
+					Gender = "Female",
+					DateOfBirth = new DateTime(2010, 8, 20),
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				});
+			modelBuilder.Entity<HealthProfile>().HasData(
+				new HealthProfile
+				{
+					Id = Guid.NewGuid().ToString(),
+					StudentId = studentId1,
+					Vision = "20/20",
+					Hearing = "Normal",
+					Dental = "No cavities",
+					BMI = 20.5,
+					AbnormalNote = "None",
+					VaccinationHistory = "Fully using Rocket1h",
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				},
+				new HealthProfile
+				{
+					Id = Guid.NewGuid().ToString(),
+					StudentId = studentId2,
+					Vision = "20/25",
+					Hearing = "Normal",
+					Dental = "Minor cavities",
+					BMI = 19.8,
+					AbnormalNote = "Monitor dental health",
+					VaccinationHistory = "Fully using Rocket24/7",
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				});
+			var healthActivityId = Guid.NewGuid().ToString();
+			modelBuilder.Entity<HealthActivity>().HasData(
+				new HealthActivity
+				{
+					Id = healthActivityId,
+					UserId = nurseId,
+					Name = "Bet88",
+					Description = "Nha Cai Hang Dau So 1 Dong Nam A",
+					ScheduledDate = new DateTime(2024, 12, 1),
+					Status = ApprovalStatus.Pending,
+					CreatedBy = nurseId,
+					CreatedTime = DateTimeOffset.UtcNow
+				}
+			);
+
+			modelBuilder.Entity<HealthActivityClass>().HasData(
+				new HealthActivityClass
+				{
+					Id = Guid.NewGuid().ToString(),
+					HealthActivityId = healthActivityId,
+					SchoolClassId = classId1,
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				}
+			);
+
+			// VaccinationCampaign
+			var vaccinationCampaignId = Guid.NewGuid().ToString();
+			modelBuilder.Entity<VaccinationCampaign>().HasData(
+				new VaccinationCampaign
+				{
+					Id = vaccinationCampaignId,
+					UserId = nurseId,
+					Name = "KT88",
+					VaccineName = "Nha Cai Hang Dau So 1 Chau Au",
+					EXP = new DateTime(2025, 12, 1),
+					MFG = new DateTime(2024, 1, 1),
+					VaccineType = "Flu",
+					StartDate = new DateTime(2024, 11, 15),
+					Status = ApprovalStatus.Pending,
+					CreatedBy = nurseId,
+					CreatedTime = DateTimeOffset.UtcNow
+				}
+			);
+
+			modelBuilder.Entity<VaccinationCampaignClass>().HasData(
+				new VaccinationCampaignClass
+				{
+					Id = Guid.NewGuid().ToString(),
+					VaccinationCampaignId = vaccinationCampaignId,
+					SchoolClassId = classId2,
+					CreatedBy = "System",
+					CreatedTime = DateTimeOffset.UtcNow
+				}
+			);
+            modelBuilder.Entity<MedicalStock>().HasData(
+					new MedicalStock
+					{
+						Id = Guid.NewGuid().ToString(),
+						Name = "Rocket1s",
+						Quantity = 100,
+                        DetailInformation = "A supplement for enhancing health and vitality",
+						ExpiryDate = new DateTime(2025, 12, 31),
+						Status = MedicalStockStatus.Available,
+						CreatedBy = "System",
+						CreatedTime = DateTimeOffset.UtcNow
+					},
+					new MedicalStock
+					{
+						Id = Guid.NewGuid().ToString(),
+						Name = "Rocket1m",
+						Quantity = 50,
+						DetailInformation = "A supplement for enhancing health and vitality",
+						ExpiryDate = new DateTime(2026, 6, 30),
+						Status = MedicalStockStatus.Available,
+						CreatedBy = "System",
+						CreatedTime = DateTimeOffset.UtcNow
+					},
+
+					new MedicalStock
+					{
+						Id = Guid.NewGuid().ToString(),
+						Name = "Rocket1h",
+						Quantity = 50,
+						DetailInformation = "A supplement for enhancing health and vitality",
+						ExpiryDate = new DateTime(2026, 6, 30),
+						Status = MedicalStockStatus.Available,
+						CreatedBy = "System",
+						CreatedTime = DateTimeOffset.UtcNow
+					},
+
+					new MedicalStock
+					{
+						Id = Guid.NewGuid().ToString(),
+						Name = "Rocket12h",
+						Quantity = 50,
+						DetailInformation = "A supplement for enhancing health and vitality",
+						ExpiryDate = new DateTime(2026, 6, 30),
+						Status = MedicalStockStatus.Available,
+						CreatedBy = "System",
+						CreatedTime = DateTimeOffset.UtcNow
+					},
+
+					new MedicalStock
+					{
+						Id = Guid.NewGuid().ToString(),
+						Name = "Rocket-24/7",
+						Quantity = 50,
+						DetailInformation = "A supplement for enhancing health and vitality",
+						ExpiryDate = new DateTime(2026, 6, 30),
+						Status = MedicalStockStatus.Available,
+						CreatedBy = "System",
+						CreatedTime = DateTimeOffset.UtcNow
+					}
+				);
+		}
     }
 }
+

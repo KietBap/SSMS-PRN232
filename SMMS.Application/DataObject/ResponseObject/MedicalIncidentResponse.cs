@@ -6,7 +6,7 @@ namespace SMMS.Application.DataObject.ResponseObject
     {
         public string StudentName { get; set; }
         public string Class { get; set; }
-        public string Type { get; set; }  
+        public string Type { get; set; }
         public string Description { get; set; }
         public MedicalIncidentStatus Status { get; set; }
         public DateTime IncidentDate { get; set; }

@@ -15,6 +15,8 @@ namespace SMMS.Application.Services.Interfaces
 
 		Task<List<HealthCheckUpResponse>> GetCheckupRecordsBySIdAsync(string studentId);
 		Task<List<HealthCheckUpResponse>> GetAllCheckupRecordsAsync();
-		Task<List<HealthCheckUpResponse>> GetCheckupRecordsByDateAsync(DateTime date);
+		Task<List<HealthCheckUpResponse>> GetCheckupRecordsByIdAndDateAsync(string activityId, DateTime date);
+		Task<List<HealthCheckUpResponse>> GetAbnormalCheckupRecordsAsync();
+		Task<List<HealthCheckUpResponse>> GetNormalCheckupRecordsAsync();
 	}
 }

@@ -108,6 +108,7 @@ namespace SMMS.Application.Services.Implements
 						CreatedTime = DateTimeOffset.UtcNow
 					};
 					_repositoryManager.VaccinationRecordRepository.Create(record);
+
 				}
 			}
 
@@ -134,6 +135,7 @@ namespace SMMS.Application.Services.Implements
 					ScheduleTime = ac.ScheduleTime,
 					ResponsibleUserId = ac.ActivityType == "HealthActivity" ? ac.HealthActivity.UserId : ac.VaccinationCampaign.UserId,
 					ResponsibleUserName = ac.ActivityType == "HealthActivity" ? ac.HealthActivity.User.FullName : ac.VaccinationCampaign.User.FullName,
+					Description = ac.Comments
 				}).ToListAsync();
 			return consents;
 		}
@@ -156,6 +158,7 @@ namespace SMMS.Application.Services.Implements
 					ScheduleTime = ac.ScheduleTime,
 					ResponsibleUserId = ac.HealthActivity.UserId,
 					ResponsibleUserName = ac.HealthActivity.User.FullName,
+					Description = ac.Comments
 				}).ToListAsync();
 			return consents;
 		}
@@ -178,8 +181,60 @@ namespace SMMS.Application.Services.Implements
 					ScheduleTime = ac.ScheduleTime,
 					ResponsibleUserId = ac.VaccinationCampaign.UserId,
 					ResponsibleUserName = ac.VaccinationCampaign.User.FullName,
+					Description = ac.VaccinationCampaign.VaccineName
 				}).ToListAsync();
 			return consents;
 		}
+
+		public async Task<List<ActivityConsentResponse>> GetConsentsByActivityIdAsync(string activityId, string activityType)
+		{
+			if (activityType == "HealthActivity")
+			{
+				return await _repositoryManager.ConsentRepository
+					.FindByCondition(ac => ac.HealthActivityId == activityId, false)
+					.Include(ac => ac.Student)
+					.Include(ac => ac.HealthActivity)
+					.Select(ac => new ActivityConsentResponse
+					{
+						Id = ac.Id,
+						StudentId = ac.StudentId,
+						StudentName = ac.Student.FullName,
+						ActivityType = "HealthActivity",
+						ActivityId = ac.HealthActivityId,
+						ActivityName = ac.HealthActivity.Name,
+						Status = ac.Status,
+						ScheduleTime = ac.ScheduleTime,
+						ResponsibleUserId = ac.HealthActivity.UserId,
+						ResponsibleUserName = ac.HealthActivity.User.FullName,
+						Description = ac.Comments
+					}).ToListAsync();
+			}
+			else if (activityType == "VaccinationCampaign")
+			{
+				return await _repositoryManager.ConsentRepository
+					.FindByCondition(ac => ac.VaccinationCampaignId == activityId, false)
+					.Include(ac => ac.Student)
+					.Include(ac => ac.VaccinationCampaign)
+					.Select(ac => new ActivityConsentResponse
+					{
+						Id = ac.Id,
+						StudentId = ac.StudentId,
+						StudentName = ac.Student.FullName,
+						ActivityType = "VaccinationCampaign",
+						ActivityId = ac.VaccinationCampaignId,
+						ActivityName = ac.VaccinationCampaign.Name,
+						Status = ac.Status,
+						ScheduleTime = ac.ScheduleTime,
+						ResponsibleUserId = ac.VaccinationCampaign.UserId,
+						ResponsibleUserName = ac.VaccinationCampaign.User.FullName,
+						Description = ac.VaccinationCampaign.VaccineName
+					}).ToListAsync();
+			}
+			else
+			{
+				return new List<ActivityConsentResponse>();
+			}
+		}
 	}
+
 }

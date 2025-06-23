@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SMMS.Application.DataObject.RequestObject;
-
+using SMMS.Application.Services.Implements;
 using SMMS.Application.Services.Interfaces;
 using SMMS.Domain.Enum;
 using System.Security.Claims;
@@ -16,13 +16,16 @@ namespace SMMS.API.Controllers
 		private readonly IConselingService _conselingService;
 		private readonly IUserService _userService;
 		private readonly IHealthCheckupService _healthCheckupService;
+		private readonly IVaccinationRecordService _vaccinationRecordService;
 		private readonly IActivityConsentService _consentService;
 
-		public ParentController(IConselingService conselingService, IUserService userService, IHealthCheckupService healthCheckupService, IActivityConsentService consentService)
+		public ParentController(IConselingService conselingService, IUserService userService, IHealthCheckupService healthCheckupService,
+			IVaccinationRecordService vaccinationRecordService, IActivityConsentService consentService)
 		{
 			_conselingService = conselingService;
 			_userService = userService;
 			_healthCheckupService = healthCheckupService;
+			_vaccinationRecordService = vaccinationRecordService;
 			_consentService = consentService;
 		}
 
@@ -46,6 +49,17 @@ namespace SMMS.API.Controllers
 			return Ok(schedules);
 		}
 
+		[HttpGet("get-all-vaccination-records")]
+		public async Task<IActionResult> GetVaccinationRecordsForMyChildren()
+		{
+			var parentId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrEmpty(parentId)) return Unauthorized("Parent ID not found.");
+
+			var records = await _vaccinationRecordService.GetVaccinationRecordsByParentIdAsync(parentId);
+			if (records == null || !records.Any()) return NotFound("No vaccination records found.");
+
+			return Ok(records);
+		}
 
 		[HttpGet("get-all-conseling-schedules")]
 		public async Task<IActionResult> GetAllConselingSchedules()
@@ -57,14 +71,21 @@ namespace SMMS.API.Controllers
 			return Ok(schedules);
 		}
 
-		[HttpPost("conseling-schedules")]
-		public async Task<IActionResult> RequestConselingSchedule([FromBody] ConselingRequest request)
+		[HttpPut("conseling-schedules-status")]
+		public async Task<IActionResult> UpdateConselingStatus([FromBody] AcceptConselingScheduleRequest request)
 		{
 			var parentId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-			if (string.IsNullOrEmpty(parentId)) return Unauthorized("Parent ID not found.");
-			var result = await _conselingService.RequestConselingScheduleAsync(request.StudentId, request.HealthCheckupId, request.RequestedDate, parentId, request.Note);
-			if (!result) return BadRequest("Failed to request schedule.");
-			return Ok("Schedule requested.");
+			if (string.IsNullOrEmpty(parentId))
+			{
+				return Unauthorized("Parent ID not found in claims.");
+			}
+			if (request.Status != ApprovalStatus.Approved && request.Status != ApprovalStatus.Rejected)
+			{
+				return BadRequest("Invalid status. Only Accepted or Rejected are allowed.");
+			}
+			var result = await _conselingService.UpdateScheduleStatusAsync(request.ConselingScheduleId, request.Status, parentId);
+			if (!result) return BadRequest("Failed to accept counseling schedule. Schedule not found or nurse ID mismatch.");
+			return Ok(true);
 		}
 
 		[HttpPut("students/{studentId}/health-profile")]
@@ -86,7 +107,6 @@ namespace SMMS.API.Controllers
 			return Ok(consents);
 		}
 
-
 		[HttpPut("activity-consents/{id}/status")]
 		[Authorize(Roles = "Parent")]
 		public async Task<IActionResult> UpdateActivityConsentStatus(string id, [FromBody] ApprovalStatus status)
@@ -98,6 +118,18 @@ namespace SMMS.API.Controllers
 			var result = await _consentService.UpdateActivityConsentStatusAsync(id, status, parentId);
 			if (!result) return BadRequest("Failed to update consent status.");
 			return NoContent();
+		}
+
+		[HttpGet("activity-consents/HealthActivity-or-VaccinationCampaign")]
+		public async Task<IActionResult> GetActivityConsentsByActivityId(string activityId, string activityType)
+		{
+			var parentId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrEmpty(parentId)) return Unauthorized("Parent ID not found.");
+
+			var consents = await _consentService.GetConsentsByActivityIdAsync(activityId, activityType);
+			if (consents == null || !consents.Any()) return NotFound("No consents found for the specified activity.");
+
+			return Ok(consents);
 		}
 	}
 }

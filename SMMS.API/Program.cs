@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -13,6 +15,26 @@ using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var serviceAccountPath = Path.Combine(Directory.GetCurrentDirectory(), "Config", "smms-otp-firebase-adminsdk-fbsvc-0fe060d117.json");
+
+try
+{
+    if (!File.Exists(serviceAccountPath))
+    {
+        throw new FileNotFoundException("Cannot Found File JSON service account at: " + serviceAccountPath);
+    }
+
+    FirebaseApp.Create(new AppOptions()
+    {
+        Credential = GoogleCredential.FromFile(serviceAccountPath)
+    });
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Error To Execute Firebase: {ex.Message}");
+    throw;
+}
 
 builder.Services.AddControllers()
        .AddJsonOptions(options =>
@@ -72,7 +94,6 @@ builder.Services.AddScoped<IRepositoryManager, RepositoryManager>();
 
 // Application Services
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<INurseService, NurseService>();
 builder.Services.AddScoped<IHealthActivityService, HealthActivityService>();
@@ -83,6 +104,7 @@ builder.Services.AddScoped<IHealthCheckupService, HealthCheckupService>();
 builder.Services.AddScoped<IConselingService, ConselingService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<ISchoolClassService, SchoolClassService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ImportService>();
 builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddScoped<IMedicalService, MedicalService>();

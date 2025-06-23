@@ -8,6 +8,7 @@ namespace SMMS.Application.Services.Interfaces
 		Task<bool> UpdateActivityConsentStatusAsync(string activityConsentId, ApprovalStatus status, string parentId);
 		Task<List<ActivityConsentResponse>> GetConsentsByParentIdAsync(string parentId);
 		Task<List<ActivityConsentResponse>> GetConsentsByHAIdAsync(string healthActivityId);
-		Task<List<ActivityConsentResponse>> GetConsentsByVCIdAsync(string vaccinationCampaignId); 
+		Task<List<ActivityConsentResponse>> GetConsentsByVCIdAsync(string vaccinationCampaignId);
+		Task<List<ActivityConsentResponse>> GetConsentsByActivityIdAsync(string activityId, string activityType);
 	}
 }

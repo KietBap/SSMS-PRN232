@@ -46,12 +46,12 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpPost("health-activities")]
-		[Authorize(Roles = "Nurse")]
+		[Authorize(Roles = "Nurse,Admin,Manager")]
 		public async Task<IActionResult> CreateHealthActivity([FromBody] HealthActivityRequest request)
 		{
-			var nurseId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-			if (nurseId == null) return Unauthorized("Nurse ID not found in claims.");
-			var response = await _healthActivityService.CreateHealthActivityAsync(request, nurseId);
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (userId == null) return Unauthorized("user ID not found in claims.");
+			var response = await _healthActivityService.CreateHealthActivityAsync(request, userId);
 			return Ok(response);
 		}
 
@@ -159,7 +159,7 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpGet("activity-consents/health-activities/{healthActivityId}")]
-		[Authorize(Roles = "Admin,Manager,Nurse")]
+		[Authorize(Roles = "Admin,Manager,Nurse,Parent")]
 		public async Task<IActionResult> GetActivityConsentsForHealthActivity(string healthActivityId)
 		{
 			var consents = await _consentService.GetConsentsByHAIdAsync(healthActivityId);
@@ -167,7 +167,7 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpGet("activity-consents/vaccination-campaigns/{vaccinationCampaignId}")]
-		[Authorize(Roles = "Admin,Manager,Nurse")]
+		[Authorize(Roles = "Admin,Manager,Nurse,Parent")]
 		public async Task<IActionResult> GetActivityConsentsForVaccinationCampaign(string vaccinationCampaignId)
 		{
 			var consents = await _consentService.GetConsentsByVCIdAsync(vaccinationCampaignId);

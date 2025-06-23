@@ -2,6 +2,7 @@
 using SMMS.Application.DataObject.ResponseObject;
 using SMMS.Application.Services.Interfaces;
 using SMMS.Domain.Entity;
+using SMMS.Domain.Enum;
 using SMMS.Domain.Interface.Repositories;
 
 namespace SMMS.Application.Services.Implements
@@ -9,16 +10,18 @@ namespace SMMS.Application.Services.Implements
 	public class ConselingService : IConselingService
 	{
 		private readonly IRepositoryManager _repositoryManager;
+		private readonly INotificationService _notificationService;
 
-		public ConselingService(IRepositoryManager repositoryManager)
+		public ConselingService(IRepositoryManager repositoryManager, INotificationService notificationService)
 		{
 			_repositoryManager = repositoryManager;
+			_notificationService = notificationService;
 		}
 
-		public async Task<bool> RequestConselingScheduleAsync(string studentId, string healthCheckupId, DateTime requestedDate, string parentId, string note)
+		public async Task<bool> RequestConselingScheduleAsync(string studentId, string healthCheckupId, DateTime requestedDate, string note)
 		{
 			var student = _repositoryManager.StudentRepository
-				.FindByCondition(s => s.Id == studentId && s.ParentId == parentId, false)
+				.FindByCondition(s => s.Id == studentId, false)
 				.FirstOrDefault();
 			if (student == null) return false;
 
@@ -37,32 +40,59 @@ namespace SMMS.Application.Services.Implements
 			var schedule = new ConselingSchedule
 			{
 				StudentId = studentId,
-				ParentId = parentId,
+				ParentId = student.ParentId,
 				MedicalStaffId = nurseId,
 				HealthCheckupId = healthCheckupId,
 				MeetingDate = requestedDate,
 				Note = note,
-				Status = false,
-				CreatedBy = parentId,
+				Status = ApprovalStatus.Pending,
+				CreatedBy = nurseId,
 				CreatedTime = DateTimeOffset.UtcNow
 			};
 			_repositoryManager.ConselingRepository.Create(schedule);
+
+			//// Notify Nurse//////////////////////////////
+			//await _notificationService.CreateNotificationAsync(
+			//	schedule.MedicalStaffId,
+			//	"New Counseling Schedule Request",
+			//	$"Parent of {student.StudentCode}-{student.FullName} has requested a counseling session."
+			//	,schedule.Id
+			//);
+
+			// Notify Parent/////////////////////////////
+			await _notificationService.CreateNotificationAsync(
+				schedule.ParentId,
+				"Counseling Schedule Request",
+				$"A counseling session has been proposed for your child {student.StudentCode}-{student.FullName}. Please confirm or reject the request.",
+				schedule.Id
+			);
+
+
 			await _repositoryManager.SaveAsync();
 			return true;
 		}
-
-		public async Task<bool> AcceptConselingScheduleAsync(string conselingScheduleId, DateTime scheduledTime, string nurseId)
+		public async Task<bool> UpdateScheduleStatusAsync(string conselingScheduleId, ApprovalStatus status, string parentId)
 		{
 			var schedule = _repositoryManager.ConselingRepository
-				.FindByCondition(cs => cs.Id == conselingScheduleId && cs.MedicalStaffId == nurseId, true)
+				.FindByCondition(cs => cs.Id == conselingScheduleId && cs.ParentId == parentId, true)
 				.FirstOrDefault();
 			if (schedule == null) return false;
 
-			schedule.MeetingDate = scheduledTime;
-			schedule.Status = true;
-			schedule.LastUpdatedBy = nurseId;
+			schedule.Status = status;
+			schedule.LastUpdatedBy = parentId;
 			schedule.LastUpdatedTime = DateTimeOffset.UtcNow;
 			_repositoryManager.ConselingRepository.Update(schedule);
+
+			// Notify Nurse//////////////////////////////////////////
+			var message = status == ApprovalStatus.Approved
+				? $"Your counseling request has been approved. Scheduled for: {schedule.MeetingDate}."
+				: "Your counseling request has been rejected.";
+			await _notificationService.CreateNotificationAsync(
+				schedule.MedicalStaffId,
+				$"Counseling Schedule {status}",
+				message, schedule.MedicalStaffId
+			);
+
 			await _repositoryManager.SaveAsync();
 			return true;
 		}
@@ -85,6 +115,7 @@ namespace SMMS.Application.Services.Implements
 					.FirstOrDefault();
 				responses.Add(new ConselingResponse
 				{
+					Id = schedule.Id,
 					StudentId = student?.Id,
 					StudentName = student?.FullName,
 					ParentName = parent?.FullName,
@@ -120,6 +151,7 @@ namespace SMMS.Application.Services.Implements
 					.FirstOrDefault();
 				responses.Add(new ConselingResponse
 				{
+					Id = schedule.Id,
 					StudentId = student?.Id,
 					StudentName = student?.FullName,
 					ParentName = parent?.FullName,

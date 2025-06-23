@@ -21,7 +21,7 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpGet]
-		[Authorize(Roles = "Admin")]
+		[Authorize(Roles = "Admin,Manager")]
 		public async Task<IActionResult> GetAllUsers()
 		{
 			var users = await _userService.GetAllUsersAsync();
@@ -29,7 +29,7 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpGet("{id}")]
-		[Authorize(Roles = "Admin")]
+		[Authorize(Roles = "Admin,Manager,Nurse,Parent")]
 		public async Task<IActionResult> GetUserById(string id)
 		{
 			var user = await _userService.GetUserByIdAsync(id);
@@ -113,13 +113,22 @@ namespace SMMS.API.Controllers
 		}
 
 		[HttpGet("students/{studentId}")]
-		[Authorize(Roles = "Admin,Manager,Nurse")]
+		[Authorize(Roles = "Admin,Manager,Nurse,Parent")]
 		public async Task<IActionResult> GetStudentsById(string studentId)
 		{
 			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 			if (string.IsNullOrEmpty(userId)) return Unauthorized();
 			var students = await _userService.GetStudentByIdAsync(studentId);
 			return Ok(students);
+		}
+
+		[HttpGet("students/code/{studentCode}")]
+		[Authorize(Roles = "Admin,Manager,Nurse")]
+		public async Task<IActionResult> GetStudentByStudentCode(string studentCode)
+		{
+			var student = await _userService.GetStudentByStudentCodeAsync(studentCode);
+			if (student == null) return NotFound("Student not found.");
+			return Ok(student);
 		}
 
 		[HttpPost("students")]
@@ -160,5 +169,29 @@ namespace SMMS.API.Controllers
 			var parents = await _userService.GetAllParentsAsync();
 			return Ok(parents);
 		}
+		[HttpGet("parents/{parentId}/students")]
+		[Authorize(Roles = "Admin,Manager,Nurse")]
+		public async Task<IActionResult> GetStudentsByParentId(string parentId)
+		{
+			var students = await _userService.GetMyStudentsAsync(parentId);
+			if (students == null || !students.Any()) return NotFound("No students found for the given parent ID.");
+			return Ok(students);
+		}
+
+		[HttpGet("students/{studentId}/parent")]
+		[Authorize(Roles = "Admin,Manager,Nurse")]
+		public async Task<IActionResult> GetParentByStudentId(string studentId)
+		{
+			try
+			{
+				var parent = await _userService.GetParentByStudentIdAsync(studentId);
+				if (parent == null) return NotFound("Parent not found for the given student ID.");
+				return Ok(parent);
+			}
+			catch (Exception ex)
+			{
+				return BadRequest(ex.Message);
+			}
+		}		
 	}
 }

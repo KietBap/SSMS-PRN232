@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Azure.Core;
+using Microsoft.EntityFrameworkCore;
 using SMMS.Application.DataObject.RequestObject;
 using SMMS.Application.DataObject.ResponseObject;
 using SMMS.Application.Services.Interfaces;
@@ -10,26 +11,29 @@ namespace SMMS.Application.Services.Implements
 {
     public class MedicalService : IMedicalService
     {
-        private readonly IRepositoryManager _repositoryManager;
+		private readonly IRepositoryManager _repositoryManager;
+		private readonly INotificationService _notificationService;
 
-        public MedicalService(IRepositoryManager repositoryManager)
-        {
-            _repositoryManager = repositoryManager;
-        }
+		public MedicalService(IRepositoryManager repositoryManager, INotificationService notificationService)
+		{
+			_repositoryManager = repositoryManager;
+			_notificationService = notificationService;
+		}
 
 
         //-----------------------------------------Medical Stock------------------------------------------------
 
 
         public async Task<bool> CreateMedicalStockAsync(string userId, CreateMedicalStockRequest request)
-		{
+        {
             try
             {
                 var stock = _repositoryManager.MedicalStockRepository
                     .FindByCondition(s => s.Name == request.Name && !s.DeletedTime.HasValue, false)
                     .FirstOrDefault();
 
-                if (stock == null) {
+                if (stock != null)
+                {
                     throw new Exception("Stock is already exist");
                 }
 
@@ -49,11 +53,11 @@ namespace SMMS.Application.Services.Implements
 
                 return true;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new Exception(ex.Message);
             }
-		}
+        }
 
         public async Task<bool> DeleteMedicalStockAsync(string id, string userId)
         {
@@ -89,7 +93,7 @@ namespace SMMS.Application.Services.Implements
                     .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, false)
                     .FirstOrDefault();
 
-                if(medicalStock == null)
+                if (medicalStock == null)
                 {
                     throw new Exception("medicalStock is deleted or can not find");
                 }
@@ -126,7 +130,7 @@ namespace SMMS.Application.Services.Implements
 
                 return medicalstocks;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new Exception(ex.Message);
             }
@@ -153,12 +157,12 @@ namespace SMMS.Application.Services.Implements
                 medicalStock.LastUpdatedBy = userId;
                 medicalStock.LastUpdatedTime = DateTime.Now;
 
-                _repositoryManager.MedicalStockRepository .Update(medicalStock);
+                _repositoryManager.MedicalStockRepository.Update(medicalStock);
                 await _repositoryManager.SaveAsync();
 
                 return true;
             }
-            catch(Exception ex )
+            catch (Exception ex)
             {
                 throw new Exception(ex.Message);
             }
@@ -172,6 +176,7 @@ namespace SMMS.Application.Services.Implements
         {
             try
             {
+                // Tạo Incident
                 var medicalIncident = new MedicalIncident
                 {
                     StudentId = request.StudentId,
@@ -186,6 +191,64 @@ namespace SMMS.Application.Services.Implements
 
                 _repositoryManager.MedicalIncidentRepository.Create(medicalIncident);
                 await _repositoryManager.SaveAsync();
+
+                // Xử lý Usage
+                var stockIds = request.MedicalUsageDetails.Select(m => m.MedicalStockId).Distinct().ToList();
+
+                var medicalStocks = _repositoryManager.MedicalStockRepository
+                    .FindByCondition(ms => stockIds.Contains(ms.Id) && !ms.DeletedTime.HasValue, true)
+                    .ToDictionary(ms => ms.Id);
+
+                foreach (var detail in request.MedicalUsageDetails)
+                {
+                    if (!medicalStocks.TryGetValue(detail.MedicalStockId, out var stock))
+                    {
+                        throw new InvalidOperationException($"Không tìm thấy thuốc với ID: {detail.MedicalStockId}");
+                    }
+
+                    if (stock.Quantity < detail.Quantity)
+                    {
+                        throw new InvalidOperationException($"Thuốc '{stock.Name}' không đủ số lượng. Còn lại: {stock.Quantity}");
+                    }
+
+                    stock.Quantity -= detail.Quantity;
+                    if (stock.Quantity == 0)
+                    {
+                        stock.Status = MedicalStockStatus.OutOfStock;
+                    }
+
+                    var usage = new MedicalUsage
+                    {
+                        MedicalIncidentId = medicalIncident.Id,
+                        MedicalStockId = stock.Id,
+                        Status = "Is Using",
+                        MedicalName = stock.Name,
+                        Dosage = detail.Dosage,
+                        Quantity = detail.Quantity,
+                        CreatedBy = userId,
+                        CreatedTime = DateTime.Now,
+                    };
+
+                    _repositoryManager.MedicalUsageRepository.Create(usage);
+                    _repositoryManager.MedicalStockRepository.Update(stock);
+                }
+
+                await _repositoryManager.SaveAsync();
+
+                // Gửi thông báo cho phụ huynh
+                var student = await _repositoryManager.StudentRepository
+                    .FindByCondition(s => s.Id == request.StudentId && s.DeletedTime == null, false)
+                    .FirstOrDefaultAsync();
+
+                if (student != null)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        student.ParentId,
+                        "New Medical Incident",
+                        $"An incident involving {student.FullName} has been reported.",
+                        medicalIncident.Id
+                    );
+                }
 
                 return true;
             }
@@ -334,7 +397,7 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
-        public async Task<bool> UpdateIncidentStatusAsync(string id, MedicalIncidentStatus status ,string userId)
+        public async Task<bool> UpdateIncidentStatusAsync(string id, MedicalIncidentStatus status, string userId)
         {
             try
             {
@@ -351,67 +414,19 @@ namespace SMMS.Application.Services.Implements
                 incident.LastUpdatedBy = userId;
                 incident.LastUpdatedTime = DateTime.Now;
 
-                _repositoryManager.MedicalIncidentRepository .Update(incident);
+                _repositoryManager.MedicalIncidentRepository.Update(incident);
                 await _repositoryManager.SaveAsync();
 
                 return true;
             }
-            catch(Exception ex) { 
+            catch (Exception ex)
+            {
                 throw new Exception(ex.Message);
             }
         }
 
 
         //-----------------------------------------Medical Usage------------------------------------------------
-
-        public async Task<bool> CreateMedicalUsageAsync(string userId, CreateMedicalUsageRequest request)
-        {
-            var stockIds = request.MedicalUsageDetails.Select(m => m.MedicalStockId).Distinct().ToList();
-
-            // Lấy tất cả MedicalStock cần thiết một lần
-            var medicalStocks = _repositoryManager.MedicalStockRepository
-                .FindByCondition(ms => stockIds.Contains(ms.Id) && !ms.DeletedTime.HasValue, true)
-                .ToDictionary(ms => ms.Id);
-
-            foreach (var detail in request.MedicalUsageDetails)
-            {
-                if (!medicalStocks.TryGetValue(detail.MedicalStockId, out var stock))
-                {
-                    throw new InvalidOperationException($"Không tìm thấy thuốc với ID: {detail.MedicalStockId}");
-                }
-
-                if (stock.Quantity < detail.Quantity)
-                {
-                    throw new InvalidOperationException($"Thuốc '{stock.Name}' không đủ số lượng. Còn lại: {stock.Quantity}");
-                }
-
-                // Trừ số lượng thuốc và cập nhật trạng thái
-                stock.Quantity -= detail.Quantity;
-                if (stock.Quantity == 0)
-                {
-                    stock.Status = MedicalStockStatus.OutOfStock;
-                }
-
-                // Tạo MedicalUsage mới
-                var usage = new MedicalUsage
-                {
-                    MedicalIncidentId = request.MedicalIncidentId,
-                    MedicalStockId = stock.Id,
-                    Status = "Is Using",
-                    MedicalName = stock.Name,
-                    Dosage = detail.Dosage,
-                    Quantity = detail.Quantity,
-                    CreatedBy = userId,
-                    CreatedTime = DateTime.Now,
-                };
-
-                _repositoryManager.MedicalUsageRepository.Create(usage);
-                _repositoryManager.MedicalStockRepository.Update(stock);
-            }
-
-            await _repositoryManager.SaveAsync();
-            return true;
-        }
 
         public async Task<bool> DeleteMedicalUsageAsync(string id, string userId)
         {
@@ -520,32 +535,80 @@ namespace SMMS.Application.Services.Implements
             return true;
         }
 
-
         //-----------------------------------------Medical Request------------------------------------------------
 
         public async Task<bool> CreateMedicalRequestAsync(string userId, CreateMedicalRequestRequest request)
         {
             try
             {
-                var medicalRequest = new MedicalRequest
-                {
-                    StudentId = request.StudentId,
-                    ParentId = request.ParentId,
-                    UserId = userId,
-                    MedicalName = request.MedicalName,
-                    StartTime = request.StartTime,
-                    EndTime = request.EndTime,
-                    Quantity = request.Quantity,
-                    Dosage = request.Dosage,
-                    Notes = request.Notes,
-                    Status = "Active",
-                    IsCompletedToday = false,
-                    CreatedTime = DateTime.Now,
-                    CreatedBy = userId,
-                };
+                // Lấy thông tin Parent để có ParentName và PhoneNumber
+                var parent = await _repositoryManager.UserRepository
+                    .FindByCondition(u => u.Id == request.ParentId && !u.DeletedTime.HasValue, false)
+                    .FirstOrDefaultAsync();
 
-                _repositoryManager.MedicalRequestRepository.Create(medicalRequest);
+                if (parent == null)
+                    throw new KeyNotFoundException("Parent not found.");
+
+                var medicalRequests = new List<MedicalRequest>();
+
+                foreach (var item in request.MedicalRequestItems)
+                {
+                    var medicalRequest = new MedicalRequest
+                    {
+                        StudentId = request.StudentId,
+                        ParentId = request.ParentId,
+                        ParentName = parent.FullName,
+                        PhoneNumber = parent.Phone ?? "",
+                        UserId = userId,
+                        MedicationName = item.MedicationName,
+                        Form = item.Form,
+                        Dosage = item.Dosage,
+                        Route = item.Route,
+                        Frequency = item.Frequency,
+                        TotalQuantity = item.TotalQuantity,
+                        RemainingQuantity = item.TotalQuantity, // Ban đầu bằng TotalQuantity
+                        TimeToAdminister = System.Text.Json.JsonSerializer.Serialize(item.TimeToAdminister),
+                        StartDate = item.StartDate,
+                        EndDate = item.EndDate,
+                        Notes = item.Notes,
+                        Status = "Active",
+                        CreatedTime = DateTimeOffset.Now,
+                        CreatedBy = userId
+                    };
+
+                    medicalRequests.Add(medicalRequest);
+                    _repositoryManager.MedicalRequestRepository.Create(medicalRequest);
+
+                    // Tự động tạo các bản ghi MedicationRequestAdministration dựa trên lịch trình
+                    var administrationSchedules = GenerateMedicationAdministrationSchedule(
+                        medicalRequest.Id,
+                        item.TimeToAdminister,
+                        item.StartDate,
+                        item.EndDate,
+                        item.Dosage);
+
+                    foreach (var schedule in administrationSchedules)
+                    {
+                        _repositoryManager.MedicationRequestAdministrationRepository.Create(schedule);
+                    }
+                }
+
                 await _repositoryManager.SaveAsync();
+
+                // Notify Parent
+                var student = await _repositoryManager.StudentRepository
+                    .FindByCondition(s => s.Id == request.StudentId && s.DeletedTime == null, false)
+                    .FirstOrDefaultAsync();
+
+                if (student != null)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        request.ParentId,
+                        "New Medical Request Created",
+                        $"Medical request for {student.FullName} has been created with {request.MedicalRequestItems.Count} medication(s).",
+                        medicalRequests.First().Id
+                    );
+                }
 
                 return true;
             }
@@ -559,25 +622,39 @@ namespace SMMS.Application.Services.Implements
         {
             try
             {
-                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                var medicalRequests = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => !m.DeletedTime.HasValue, false)
                     .Include(mr => mr.Student)
                         .ThenInclude(s => s.SchoolClass)
-                    .Select(mr => new ListMedicalRequestResponse
-                    {
-                        Id = mr.Id,
-                        StudentName = mr.Student.FullName,
-                        Class = mr.Student.SchoolClass.ClassName,
-                        MedicalName = mr.MedicalName,
-                        Status = mr.Status,
-                        StartTime = mr.StartTime,
-                        EndTime = mr.EndTime,
-                        Dosage = mr.Dosage,
-                        IsCompletedToday = mr.IsCompletedToday,
-                        LastCompletedDate = mr.LastCompletedDate
-                    }).ToList();
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                    .ToListAsync();
 
-                return medicalRequests;
+                return medicalRequests.Select(mr => new ListMedicalRequestResponse
+                {
+                    Id = mr.Id,
+					StudentId = mr.StudentId,
+					StudentName = mr.Student.FullName,
+                    StudentClass = mr.Student.SchoolClass.ClassName,
+                    ParentName = mr.ParentName,
+                    MedicationName = mr.MedicationName,
+                    Form = mr.Form,
+                    Dosage = mr.Dosage,
+                    Frequency = mr.Frequency,
+                    TotalQuantity = mr.TotalQuantity,
+                    RemainingQuantity = mr.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>(),
+                    StartDate = mr.StartDate,
+                    EndDate = mr.EndDate,
+                    Status = mr.Status,
+                    CreatedTime = mr.CreatedTime,
+                    TotalAdministrations = mr.MedicationRequestAdministrations.Count,
+                    CompletedAdministrations = mr.MedicationRequestAdministrations.Count(a => a.WasTaken),
+                    LastAdministeredAt = mr.MedicationRequestAdministrations
+                        .Where(a => a.WasTaken)
+                        .OrderByDescending(a => a.AdministeredAt)
+                        .Select(a => a.AdministeredAt)
+                        .FirstOrDefault()
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -589,39 +666,53 @@ namespace SMMS.Application.Services.Implements
         {
             try
             {
-                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                var medicalRequest = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, false)
                     .Include(mr => mr.Student)
                         .ThenInclude(s => s.SchoolClass)
                     .Include(mr => mr.Parent)
                     .Include(mr => mr.User)
-                    .FirstOrDefault();
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                        .ThenInclude(a => a.Administrator)
+                    .FirstOrDefaultAsync();
 
                 if (medicalRequest == null)
-                {
                     throw new KeyNotFoundException("Medical request not found or has been deleted.");
-                }
 
                 return new MedicalRequestResponse
                 {
                     Id = medicalRequest.Id,
                     StudentId = medicalRequest.StudentId,
                     StudentName = medicalRequest.Student?.FullName ?? "N/A",
-                    Class = medicalRequest.Student?.SchoolClass?.ClassName ?? "N/A",
+                    StudentClass = medicalRequest.Student?.SchoolClass?.ClassName ?? "N/A",
                     ParentId = medicalRequest.ParentId,
-                    ParentName = medicalRequest.Parent?.FullName ?? "N/A",
+                    ParentName = medicalRequest.ParentName,
+                    PhoneNumber = medicalRequest.PhoneNumber,
                     UserId = medicalRequest.UserId,
                     NurseName = medicalRequest.User?.FullName ?? "N/A",
-                    MedicalName = medicalRequest.MedicalName,
-                    Status = medicalRequest.Status,
-                    StartTime = medicalRequest.StartTime,
-                    EndTime = medicalRequest.EndTime,
-                    Quantity = medicalRequest.Quantity,
+                    MedicationName = medicalRequest.MedicationName,
+                    Form = medicalRequest.Form,
                     Dosage = medicalRequest.Dosage,
+                    Route = medicalRequest.Route,
+                    Frequency = medicalRequest.Frequency,
+                    TotalQuantity = medicalRequest.TotalQuantity,
+                    RemainingQuantity = medicalRequest.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(medicalRequest.TimeToAdminister) ?? new List<string>(),
+                    StartDate = medicalRequest.StartDate,
+                    EndDate = medicalRequest.EndDate,
                     Notes = medicalRequest.Notes,
+                    Status = medicalRequest.Status,
                     CreatedTime = medicalRequest.CreatedTime,
-                    LastCompletedDate = medicalRequest.LastCompletedDate,
-                    IsCompletedToday = medicalRequest.IsCompletedToday
+                    Administrations = medicalRequest.MedicationRequestAdministrations?.Select(a => new MedicationAdministrationResponse
+                    {
+                        Id = a.Id,
+                        AdministeredBy = a.AdministeredBy,
+                        AdministratorName = a.Administrator?.FullName ?? "N/A",
+                        AdministeredAt = a.AdministeredAt,
+                        DoseGiven = a.DoseGiven,
+                        WasTaken = a.WasTaken,
+                        Notes = a.Notes
+                    }).ToList() ?? new List<MedicationAdministrationResponse>()
                 };
             }
             catch (Exception ex)
@@ -630,34 +721,117 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
-        public async Task<bool> UpdateMedicalRequestAsync(string id, UpdateMedicalRequestRequest request, string userId)
+        public async Task<MedicalRequestResponse> UpdateMedicalRequestAsync(string id, UpdateMedicalRequestRequest request, string userId)
         {
             try
             {
-                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                var medicalRequest = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
-                    .FirstOrDefault();
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Include(mr => mr.Parent)
+                    .Include(mr => mr.User)
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                        .ThenInclude(a => a.Administrator)
+                    .FirstOrDefaultAsync();
 
                 if (medicalRequest == null)
                     throw new KeyNotFoundException("Medical request not found or has been deleted.");
 
-                medicalRequest.MedicalName = request.MedicalName;
-                medicalRequest.StartTime = request.StartTime;
-                medicalRequest.EndTime = request.EndTime;
-                medicalRequest.Quantity = request.Quantity;
+                // Kiểm tra business logic
+                if (request.StartDate >= request.EndDate)
+                    throw new InvalidOperationException("Start date must be before end date.");
+
+                if (request.TotalQuantity <= 0)
+                    throw new InvalidOperationException("Total quantity must be greater than 0.");
+
+                if (request.Frequency <= 0)
+                    throw new InvalidOperationException("Frequency must be greater than 0.");
+
+                // Tính toán RemainingQuantity khi TotalQuantity thay đổi
+                var quantityDifference = request.TotalQuantity - medicalRequest.TotalQuantity;
+                var newRemainingQuantity = medicalRequest.RemainingQuantity + quantityDifference;
+
+                // Đảm bảo RemainingQuantity không âm
+                if (newRemainingQuantity < 0)
+                    throw new InvalidOperationException("Cannot reduce total quantity below the amount already administered.");
+
+                // Cập nhật thông tin
+                medicalRequest.MedicationName = request.MedicationName;
+                medicalRequest.Form = request.Form;
                 medicalRequest.Dosage = request.Dosage;
+                medicalRequest.Route = request.Route;
+                medicalRequest.Frequency = request.Frequency;
+                medicalRequest.TotalQuantity = request.TotalQuantity;
+                medicalRequest.RemainingQuantity = newRemainingQuantity;
+                medicalRequest.TimeToAdminister = System.Text.Json.JsonSerializer.Serialize(request.TimeToAdminister);
+                medicalRequest.StartDate = request.StartDate;
+                medicalRequest.EndDate = request.EndDate;
                 medicalRequest.Notes = request.Notes;
                 medicalRequest.LastUpdatedBy = userId;
-                medicalRequest.LastUpdatedTime = DateTime.Now;
+                medicalRequest.LastUpdatedTime = DateTimeOffset.Now;
+
+                // Cập nhật status nếu cần
+                if (medicalRequest.RemainingQuantity == 0)
+                {
+                    medicalRequest.Status = "Completed";
+                }
+                else if (medicalRequest.Status == "Completed" && medicalRequest.RemainingQuantity > 0)
+                {
+                    medicalRequest.Status = "Active";
+                }
 
                 _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
                 await _repositoryManager.SaveAsync();
 
-                return true;
+                // Trả về response object
+                return new MedicalRequestResponse
+                {
+                    Id = medicalRequest.Id,
+                    StudentId = medicalRequest.StudentId,
+                    StudentName = medicalRequest.Student?.FullName ?? "N/A",
+                    StudentClass = medicalRequest.Student?.SchoolClass?.ClassName ?? "N/A",
+                    ParentId = medicalRequest.ParentId,
+                    ParentName = medicalRequest.ParentName,
+                    PhoneNumber = medicalRequest.PhoneNumber,
+                    UserId = medicalRequest.UserId,
+                    NurseName = medicalRequest.User?.FullName ?? "N/A",
+                    MedicationName = medicalRequest.MedicationName,
+                    Form = medicalRequest.Form,
+                    Dosage = medicalRequest.Dosage,
+                    Route = medicalRequest.Route,
+                    Frequency = medicalRequest.Frequency,
+                    TotalQuantity = medicalRequest.TotalQuantity,
+                    RemainingQuantity = medicalRequest.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(medicalRequest.TimeToAdminister) ?? new List<string>(),
+                    StartDate = medicalRequest.StartDate,
+                    EndDate = medicalRequest.EndDate,
+                    Notes = medicalRequest.Notes,
+                    Status = medicalRequest.Status,
+                    CreatedTime = medicalRequest.CreatedTime,
+                    Administrations = medicalRequest.MedicationRequestAdministrations?.Select(a => new MedicationAdministrationResponse
+                    {
+                        Id = a.Id,
+                        AdministeredBy = a.AdministeredBy,
+                        AdministratorName = a.Administrator?.FullName ?? "N/A",
+                        AdministeredAt = a.AdministeredAt,
+                        DoseGiven = a.DoseGiven,
+                        WasTaken = a.WasTaken,
+                        Notes = a.Notes
+                    }).ToList() ?? new List<MedicationAdministrationResponse>()
+                };
+            }
+            catch (KeyNotFoundException)
+            {
+                throw;
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                throw new Exception(ex.Message);
+                throw new Exception($"An error occurred while updating the medical request: {ex.Message}");
             }
         }
 
@@ -665,116 +839,29 @@ namespace SMMS.Application.Services.Implements
         {
             try
             {
-                var medicalRequest = _repositoryManager.MedicalRequestRepository
+                var medicalRequest = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
-                    .FirstOrDefault();
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                    .FirstOrDefaultAsync();
 
                 if (medicalRequest == null)
                     throw new KeyNotFoundException("Medical request not found or has been deleted.");
 
+                // Soft delete medical request và thay đổi status
                 medicalRequest.DeletedTime = DateTimeOffset.Now;
                 medicalRequest.DeletedBy = userId;
+                medicalRequest.Status = "Deleted";
 
-                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
-                await _repositoryManager.SaveAsync();
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-        }
-
-        public async Task<List<DailyMedicalRequestResponse>> GetDailyMedicalRequestsAsync(DateTime date)
-        {
-            try
-            {
-                // Chỉ lấy phần ngày, bỏ qua thời gian cụ thể
-                var targetDate = date.Date;
-
-                var medicalRequests = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => !m.DeletedTime.HasValue &&
-                                          m.StartTime.Date <= targetDate &&
-                                          m.EndTime.Date >= targetDate &&
-                                          m.Status == "Active", false)
-                    .Include(mr => mr.Student)
-                        .ThenInclude(s => s.SchoolClass)
-                    .Select(mr => new DailyMedicalRequestResponse
-                    {
-                        Id = mr.Id,
-                        StudentName = mr.Student.FullName,
-                        Class = mr.Student.SchoolClass.ClassName,
-                        MedicalName = mr.MedicalName,
-                        Dosage = mr.Dosage,
-                        Quantity = mr.Quantity,
-                        IsCompleted = mr.IsCompletedToday && mr.LastCompletedDate.HasValue &&
-                                     mr.LastCompletedDate.Value.Date == targetDate,
-                        CompletedTime = mr.LastCompletedDate.HasValue &&
-                                       mr.LastCompletedDate.Value.Date == targetDate ?
-                                       mr.LastCompletedDate : null,
-                        Status = mr.Status,
-                        Notes = mr.Notes
-                    }).ToList();
-
-                return medicalRequests;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-        }
-
-        public async Task<bool> CompleteMedicalRequestAsync(string id, string userId)
-        {
-            try
-            {
-                var medicalRequest = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
-                    .FirstOrDefault();
-
-                if (medicalRequest == null)
-                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
-
-                var now = DateTime.Now;
-
-                // Kiểm tra xem đã complete hôm nay chưa
-                if (medicalRequest.LastCompletedDate.HasValue &&
-                    medicalRequest.LastCompletedDate.Value.Date == now.Date)
+                // Soft delete tất cả MedicationRequestAdministration liên quan
+                foreach (var administration in medicalRequest.MedicationRequestAdministrations)
                 {
-                    throw new InvalidOperationException("Medical request has already been completed today.");
+                    if (!administration.DeletedTime.HasValue) // Chỉ xóa những bản ghi chưa bị xóa
+                    {
+                        administration.DeletedTime = DateTimeOffset.Now;
+                        administration.DeletedBy = userId;
+                        _repositoryManager.MedicationRequestAdministrationRepository.Update(administration);
+                    }
                 }
-
-                medicalRequest.IsCompletedToday = true;
-                medicalRequest.LastCompletedDate = now;
-                medicalRequest.LastUpdatedBy = userId;
-                medicalRequest.LastUpdatedTime = DateTimeOffset.Now;
-
-                _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
-                await _repositoryManager.SaveAsync();
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-        }
-
-        public async Task<bool> UpdateMedicalRequestStatusAsync(string id, string status, string userId)
-        {
-            try
-            {
-                var medicalRequest = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => m.Id == id && !m.DeletedTime.HasValue, true)
-                    .FirstOrDefault();
-
-                if (medicalRequest == null)
-                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
-
-                medicalRequest.Status = status;
-                medicalRequest.LastUpdatedBy = userId;
-                medicalRequest.LastUpdatedTime = DateTime.Now;
 
                 _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
                 await _repositoryManager.SaveAsync();
@@ -791,25 +878,38 @@ namespace SMMS.Application.Services.Implements
         {
             try
             {
-                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                var medicalRequests = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => !m.DeletedTime.HasValue && m.StudentId == studentId, false)
                     .Include(mr => mr.Student)
                         .ThenInclude(s => s.SchoolClass)
-                    .Select(mr => new ListMedicalRequestResponse
-                    {
-                        Id = mr.Id,
-                        StudentName = mr.Student.FullName,
-                        Class = mr.Student.SchoolClass.ClassName,
-                        MedicalName = mr.MedicalName,
-                        Status = mr.Status,
-                        StartTime = mr.StartTime,
-                        EndTime = mr.EndTime,
-                        Dosage = mr.Dosage,
-                        IsCompletedToday = mr.IsCompletedToday,
-                        LastCompletedDate = mr.LastCompletedDate
-                    }).ToList();
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                    .ToListAsync();
 
-                return medicalRequests;
+                return medicalRequests.Select(mr => new ListMedicalRequestResponse
+                {
+                    Id = mr.Id,
+                    StudentName = mr.Student.FullName,
+                    StudentClass = mr.Student.SchoolClass.ClassName,
+                    ParentName = mr.ParentName,
+                    MedicationName = mr.MedicationName,
+                    Form = mr.Form,
+                    Dosage = mr.Dosage,
+                    Frequency = mr.Frequency,
+                    TotalQuantity = mr.TotalQuantity,
+                    RemainingQuantity = mr.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>(),
+                    StartDate = mr.StartDate,
+                    EndDate = mr.EndDate,
+                    Status = mr.Status,
+                    CreatedTime = mr.CreatedTime,
+                    TotalAdministrations = mr.MedicationRequestAdministrations.Count,
+                    CompletedAdministrations = mr.MedicationRequestAdministrations.Count(a => a.WasTaken),
+                    LastAdministeredAt = mr.MedicationRequestAdministrations
+                        .Where(a => a.WasTaken)
+                        .OrderByDescending(a => a.AdministeredAt)
+                        .Select(a => a.AdministeredAt)
+                        .FirstOrDefault()
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -817,29 +917,42 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
-        public async Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByStatusAsync(string status)
+        public async Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByParentAsync(string parentId)
         {
             try
             {
-                var medicalRequests = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => !m.DeletedTime.HasValue && m.Status == status, false)
+                var medicalRequests = await _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue && m.ParentId == parentId, false)
                     .Include(mr => mr.Student)
                         .ThenInclude(s => s.SchoolClass)
-                    .Select(mr => new ListMedicalRequestResponse
-                    {
-                        Id = mr.Id,
-                        StudentName = mr.Student.FullName,
-                        Class = mr.Student.SchoolClass.ClassName,
-                        MedicalName = mr.MedicalName,
-                        Status = mr.Status,
-                        StartTime = mr.StartTime,
-                        EndTime = mr.EndTime,
-                        Dosage = mr.Dosage,
-                        IsCompletedToday = mr.IsCompletedToday,
-                        LastCompletedDate = mr.LastCompletedDate
-                    }).ToList();
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                    .ToListAsync();
 
-                return medicalRequests;
+                return medicalRequests.Select(mr => new ListMedicalRequestResponse
+                {
+                    Id = mr.Id,
+                    StudentName = mr.Student.FullName,
+                    StudentClass = mr.Student.SchoolClass.ClassName,
+                    ParentName = mr.ParentName,
+                    MedicationName = mr.MedicationName,
+                    Form = mr.Form,
+                    Dosage = mr.Dosage,
+                    Frequency = mr.Frequency,
+                    TotalQuantity = mr.TotalQuantity,
+                    RemainingQuantity = mr.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>(),
+                    StartDate = mr.StartDate,
+                    EndDate = mr.EndDate,
+                    Status = mr.Status,
+                    CreatedTime = mr.CreatedTime,
+                    TotalAdministrations = mr.MedicationRequestAdministrations.Count,
+                    CompletedAdministrations = mr.MedicationRequestAdministrations.Count(a => a.WasTaken),
+                    LastAdministeredAt = mr.MedicationRequestAdministrations
+                        .Where(a => a.WasTaken)
+                        .OrderByDescending(a => a.AdministeredAt)
+                        .Select(a => a.AdministeredAt)
+                        .FirstOrDefault()
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -847,80 +960,170 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
-        public async Task<List<ListMedicalRequestResponse>> SearchMedicalRequestsAsync(string? medicalName, string? studentId, DateTime? date, string? status)
+        public async Task<List<DailyMedicationScheduleResponse>> GetDailyMedicationScheduleAsync(DateTime date)
         {
             try
             {
-                var query = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => !m.DeletedTime.HasValue, false)
-                    .Include(mr => mr.Student)
-                        .ThenInclude(s => s.SchoolClass)
-                    .AsQueryable();
+                var targetDate = date.Date;
 
-                if (!string.IsNullOrEmpty(medicalName))
-                {
-                    query = query.Where(m => m.MedicalName.Contains(medicalName));
-                }
-
-                if (!string.IsNullOrEmpty(studentId))
-                {
-                    query = query.Where(m => m.StudentId == studentId);
-                }
-
-                if (date.HasValue)
-                {
-                    var targetDate = date.Value.Date;
-                    query = query.Where(m => m.StartTime.Date <= targetDate && m.EndTime.Date >= targetDate);
-                }
-
-                if (!string.IsNullOrEmpty(status))
-                {
-                    query = query.Where(m => m.Status == status);
-                }
-
-                var medicalRequests = query
-                    .Select(mr => new ListMedicalRequestResponse
-                    {
-                        Id = mr.Id,
-                        StudentName = mr.Student.FullName,
-                        Class = mr.Student.SchoolClass.ClassName,
-                        MedicalName = mr.MedicalName,
-                        Status = mr.Status,
-                        StartTime = mr.StartTime,
-                        EndTime = mr.EndTime,
-                        Dosage = mr.Dosage,
-                        IsCompletedToday = mr.IsCompletedToday,
-                        LastCompletedDate = mr.LastCompletedDate
-                    }).ToList();
-
-                return medicalRequests;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
-        }
-
-        public async Task<bool> ResetDailyCompletionStatusAsync()
-        {
-            try
-            {
-                var today = DateTime.Today;
-                var medicalRequests = _repositoryManager.MedicalRequestRepository
+                var medicalRequests = await _repositoryManager.MedicalRequestRepository
                     .FindByCondition(m => !m.DeletedTime.HasValue &&
-                                          m.IsCompletedToday &&
-                                          m.LastCompletedDate.HasValue &&
-                                          m.LastCompletedDate.Value.Date < today, true)
-                    .ToList();
+                                          m.StartDate.Date <= targetDate &&
+                                          m.EndDate.Date >= targetDate &&
+                                          m.Status == "Active", false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                        .ThenInclude(a => a.Administrator)
+                    .ToListAsync();
 
-                foreach (var request in medicalRequests)
+                return medicalRequests.Select(mr =>
                 {
-                    request.IsCompletedToday = false;
+                    var timeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>();
+                    var todayAdministrations = mr.MedicationRequestAdministrations
+                        .Where(a => !a.DeletedTime.HasValue && a.AdministeredAt.Date == targetDate)
+                        .ToList();
+
+                    return new DailyMedicationScheduleResponse
+                    {
+                        Id = mr.Id,
+                        StudentName = mr.Student?.FullName ?? "N/A",
+                        StudentClass = mr.Student?.SchoolClass?.ClassName ?? "N/A",
+                        MedicationName = mr.MedicationName,
+                        Form = mr.Form,
+                        Dosage = mr.Dosage,
+                        Route = mr.Route,
+                        ScheduledTimes = timeToAdminister,
+                        Notes = mr.Notes,
+                        TodayAdministrations = timeToAdminister.Select(time =>
+                        {
+                            // Parse thời gian từ string để so sánh chính xác
+                            if (!TimeSpan.TryParse(time, out var scheduledTime))
+                            {
+                                // Nếu không parse được thời gian, trả về trạng thái mặc định
+                                return new DailyAdministrationStatus
+                                {
+                                    AdministrationId = null,
+                                    ScheduledTime = time,
+                                    CompletedAt = null,
+                                    DoseGiven = null,
+                                    WasTaken = false,
+                                    Notes = "Invalid time format",
+                                    AdministratorName = null
+                                };
+                            }
+
+                            var administration = todayAdministrations.FirstOrDefault(a =>
+                            {
+                                var adminTime = a.AdministeredAt.TimeOfDay;
+                                // So sánh với độ chính xác đến phút (cho phép sai lệch 30 phút)
+                                return Math.Abs((adminTime - scheduledTime).TotalMinutes) <= 30;
+                            });
+
+                            return new DailyAdministrationStatus
+                            {
+                                AdministrationId = administration?.Id,
+                                ScheduledTime = time,
+                                CompletedAt = administration?.AdministeredAt,
+                                DoseGiven = administration?.DoseGiven,
+                                WasTaken = administration?.WasTaken ?? false,
+                                Notes = administration?.Notes,
+                                AdministratorName = administration?.Administrator?.FullName
+                            };
+                        }).ToList()
+                    };
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        public async Task<bool> RecordMedicationAdministrationAsync(string userId, RecordMedicationAdministrationRequest request)
+        {
+            try
+            {
+                var medicalRequest = await _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => m.Id == request.MedicalRequestId && !m.DeletedTime.HasValue, true)
+                    .FirstOrDefaultAsync();
+
+                if (medicalRequest == null)
+                    throw new KeyNotFoundException("Medical request not found or has been deleted.");
+
+                MedicationRequestAdministration administration;
+
+                // Nếu có AdministrationId, tìm và cập nhật bản ghi đã có
+                if (!string.IsNullOrEmpty(request.AdministrationId))
+                {
+                    administration = await _repositoryManager.MedicationRequestAdministrationRepository
+                        .FindByCondition(a => a.Id == request.AdministrationId &&
+                                            a.MedicalRequestId == request.MedicalRequestId &&
+                                            !a.DeletedTime.HasValue, true)
+                        .FirstOrDefaultAsync();
+
+                    if (administration == null)
+                        throw new KeyNotFoundException("Administration record not found.");
+
+                    // Cập nhật thông tin
+                    administration.AdministeredBy = userId;
+                    administration.AdministeredAt = request.AdministeredAt ?? DateTime.Now;
+                    administration.DoseGiven = request.DoseGiven;
+                    administration.WasTaken = request.WasTaken;
+                    administration.Notes = request.Notes;
+                    administration.LastUpdatedBy = userId;
+                    administration.LastUpdatedTime = DateTimeOffset.Now;
+
+                    _repositoryManager.MedicationRequestAdministrationRepository.Update(administration);
+                }
+                else
+                {
+                    // Tạo bản ghi mới (logic cũ)
+                    administration = new MedicationRequestAdministration
+                    {
+                        MedicalRequestId = request.MedicalRequestId,
+                        AdministeredBy = userId,
+                        AdministeredAt = request.AdministeredAt ?? DateTime.Now,
+                        DoseGiven = request.DoseGiven,
+                        WasTaken = request.WasTaken,
+                        Notes = request.Notes,
+                        CreatedTime = DateTimeOffset.Now,
+                        CreatedBy = userId
+                    };
+
+                    _repositoryManager.MedicationRequestAdministrationRepository.Create(administration);
                 }
 
-                if (medicalRequests.Any())
+                // Cập nhật RemainingQuantity nếu thuốc đã được uống
+                if (request.WasTaken)
                 {
-                    await _repositoryManager.SaveAsync();
+                    // Parse dose để lấy số lượng (ví dụ: "2 viên" -> 2)
+                    var doseNumber = ExtractNumberFromDose(request.DoseGiven);
+                    medicalRequest.RemainingQuantity = Math.Max(0, medicalRequest.RemainingQuantity - doseNumber);
+
+                    if (medicalRequest.RemainingQuantity == 0)
+                    {
+                        medicalRequest.Status = "Completed";
+                    }
+
+                    _repositoryManager.MedicalRequestRepository.Update(medicalRequest);
+                }
+
+                await _repositoryManager.SaveAsync();
+
+                // Notify Parent
+                var student = await _repositoryManager.StudentRepository
+                    .FindByCondition(s => s.Id == medicalRequest.StudentId && s.DeletedTime == null, false)
+                    .FirstOrDefaultAsync();
+
+                if (student != null && request.WasTaken)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        medicalRequest.ParentId,
+                        "Medication Administered",
+                        $"{student.FullName} has been given {medicalRequest.MedicationName} - {request.DoseGiven}.",
+                        administration.Id
+                    );
                 }
 
                 return true;
@@ -931,36 +1134,125 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
-        public async Task<object> GetCompletionStatusByDateAsync(DateTime date)
+        private int ExtractNumberFromDose(string dose)
+        {
+            // Extract number from dose string like "2 viên", "10ml", etc.
+            var match = System.Text.RegularExpressions.Regex.Match(dose, @"\d+");
+            return match.Success ? int.Parse(match.Value) : 1;
+        }
+
+        /// <summary>
+        /// Tự động tạo lịch trình MedicationRequestAdministration dựa trên thời gian và tần suất uống thuốc
+        /// </summary>
+        /// <param name="medicalRequestId">ID của MedicalRequest</param>
+        /// <param name="timeToAdminister">Danh sách thời gian uống thuốc trong ngày (VD: ["07:00", "12:00", "19:00"])</param>
+        /// <param name="startDate">Ngày bắt đầu</param>
+        /// <param name="endDate">Ngày kết thúc</param>
+        /// <param name="dosage">Liều lượng mỗi lần uống</param>
+        /// <returns>Danh sách các bản ghi MedicationRequestAdministration</returns>
+        private List<MedicationRequestAdministration> GenerateMedicationAdministrationSchedule(
+            string medicalRequestId,
+            List<string> timeToAdminister,
+            DateTime startDate,
+            DateTime endDate,
+            string dosage)
+        {
+            var administrations = new List<MedicationRequestAdministration>();
+
+            // Lặp qua từng ngày từ startDate đến endDate
+            for (var date = startDate.Date; date <= endDate.Date; date = date.AddDays(1))
+            {
+                // Lặp qua từng thời gian uống thuốc trong ngày
+                foreach (var time in timeToAdminister)
+                {
+                    // Parse thời gian (VD: "07:00" -> 7 giờ 0 phút)
+                    if (TimeSpan.TryParse(time, out var timeSpan))
+                    {
+                        var administrationDateTime = date.Add(timeSpan);
+
+                        // Chỉ tạo lịch trình cho tương lai hoặc hôm nay
+                        if (administrationDateTime >= DateTime.Now.Date)
+                        {
+                            var administration = new MedicationRequestAdministration
+                            {
+                                MedicalRequestId = medicalRequestId,
+                                AdministeredBy = null, // Sẽ được cập nhật khi y tá thực hiện
+                                AdministeredAt = administrationDateTime,
+                                DoseGiven = null, // Sẽ được cập nhật khi y tá thực hiện với liều lượng thực tế
+                                WasTaken = false, // Mặc định chưa uống
+                                Notes = $"Scheduled administration at {time} - Planned dose: {dosage}",
+                                CreatedTime = DateTimeOffset.Now,
+                                CreatedBy = "System" // Được tạo tự động bởi hệ thống
+                            };
+
+                            administrations.Add(administration);
+                        }
+                    }
+                }
+            }
+
+            return administrations;
+        }
+
+        public async Task<List<ListMedicalRequestResponse>> SearchMedicalRequestsAsync(string? medicationName, string? studentId, DateTime? date, string? status)
         {
             try
             {
-                var targetDate = date.Date;
+                var query = _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue, false)
+                    .Include(mr => mr.Student)
+                        .ThenInclude(s => s.SchoolClass)
+                    .Include(mr => mr.MedicationRequestAdministrations)
+                    .AsQueryable();
 
-                var totalRequests = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => !m.DeletedTime.HasValue &&
-                                          m.StartTime.Date <= targetDate &&
-                                          m.EndTime.Date >= targetDate &&
-                                          m.Status == "Active", false)
-                    .Count();
-
-                var completedRequests = _repositoryManager.MedicalRequestRepository
-                    .FindByCondition(m => !m.DeletedTime.HasValue &&
-                                          m.StartTime.Date <= targetDate &&
-                                          m.EndTime.Date >= targetDate &&
-                                          m.Status == "Active" &&
-                                          m.LastCompletedDate.HasValue &&
-                                          m.LastCompletedDate.Value.Date == targetDate, false)
-                    .Count();
-
-                return new
+                if (!string.IsNullOrEmpty(medicationName))
                 {
-                    Date = targetDate,
-                    TotalRequests = totalRequests,
-                    CompletedRequests = completedRequests,
-                    PendingRequests = totalRequests - completedRequests,
-                    CompletionRate = totalRequests > 0 ? (double)completedRequests / totalRequests * 100 : 0
-                };
+                    query = query.Where(m => m.MedicationName.Contains(medicationName));
+                }
+
+                if (!string.IsNullOrEmpty(studentId))
+                {
+                    query = query.Where(m => m.StudentId == studentId);
+                }
+
+                if (date.HasValue)
+                {
+                    var targetDate = date.Value.Date;
+                    query = query.Where(m => m.StartDate.Date <= targetDate && m.EndDate.Date >= targetDate);
+                }
+
+                if (!string.IsNullOrEmpty(status))
+                {
+                    query = query.Where(m => m.Status == status);
+                }
+
+                var medicalRequests = await query.ToListAsync();
+
+                return medicalRequests.Select(mr => new ListMedicalRequestResponse
+                {
+                    Id = mr.Id,
+                    StudentName = mr.Student.FullName,
+                    StudentClass = mr.Student.SchoolClass.ClassName,
+                    ParentName = mr.ParentName,
+                    MedicationName = mr.MedicationName,
+                    Form = mr.Form,
+                    Dosage = mr.Dosage,
+                    Frequency = mr.Frequency,
+                    TotalQuantity = mr.TotalQuantity,
+                    RemainingQuantity = mr.RemainingQuantity,
+                    TimeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>(),
+                    StartDate = mr.StartDate,
+                    EndDate = mr.EndDate,
+                    Status = mr.Status,
+                    CreatedTime = mr.CreatedTime,
+                    TotalAdministrations = mr.MedicationRequestAdministrations.Count,
+                    CompletedAdministrations = mr.MedicationRequestAdministrations.Count(a => a.WasTaken),
+                    LastAdministeredAt = mr.MedicationRequestAdministrations
+                        .Where(a => a.WasTaken)
+                        .OrderByDescending(a => a.AdministeredAt)
+                        .Select(a => a.AdministeredAt)
+                        .FirstOrDefault()
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -968,6 +1260,104 @@ namespace SMMS.Application.Services.Implements
             }
         }
 
+        public async Task<DailyCompletedMedicationSummary> GetCompletedMedicationHistoryAsync(DateTime date)
+        {
+            try
+            {
+                var targetDate = date.Date;
 
+                // Lấy tất cả administrations đã hoàn thành trong ngày
+                var completedAdministrations = await _repositoryManager.MedicationRequestAdministrationRepository
+                    .FindByCondition(a => !a.DeletedTime.HasValue &&
+                                        a.AdministeredBy != null && // Đã được thực hiện
+                                        a.AdministeredAt.Date == targetDate, false)
+                    .Include(a => a.MedicalRequest)
+                        .ThenInclude(mr => mr.Student)
+                            .ThenInclude(s => s.SchoolClass)
+                    .Include(a => a.Administrator)
+                    .OrderBy(a => a.AdministeredAt)
+                    .ToListAsync();
+
+                // Lấy tất cả medical requests active trong ngày để tính tổng số lịch
+                var activeMedicalRequests = await _repositoryManager.MedicalRequestRepository
+                    .FindByCondition(m => !m.DeletedTime.HasValue &&
+                                        m.StartDate.Date <= targetDate &&
+                                        m.EndDate.Date >= targetDate &&
+                                        m.Status == "Active", false)
+                    .ToListAsync();
+
+                // Tính tổng số lịch trong ngày
+                int totalScheduled = 0;
+                foreach (var mr in activeMedicalRequests)
+                {
+                    var timeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(mr.TimeToAdminister) ?? new List<string>();
+                    totalScheduled += timeToAdminister.Count;
+                }
+
+                // Tạo response objects
+                var completedHistoryList = completedAdministrations.Select(a =>
+                {
+                    var timeToAdminister = System.Text.Json.JsonSerializer.Deserialize<List<string>>(a.MedicalRequest.TimeToAdminister) ?? new List<string>();
+
+                    // Tìm thời gian dự kiến gần nhất với thời gian thực tế
+                    var actualTime = a.AdministeredAt.TimeOfDay;
+                    var closestScheduledTime = timeToAdminister
+                        .Select(t => TimeSpan.TryParse(t, out var time) ? time : TimeSpan.Zero)
+                        .OrderBy(t => Math.Abs((t - actualTime).TotalMinutes))
+                        .FirstOrDefault();
+
+                    var scheduledDateTime = targetDate.Add(closestScheduledTime);
+                    var timeDifference = a.AdministeredAt - scheduledDateTime;
+
+                    return new CompletedMedicationHistoryResponse
+                    {
+                        Id = a.Id,
+                        MedicalRequestId = a.MedicalRequestId,
+                        StudentId = a.MedicalRequest.StudentId,
+                        StudentName = a.MedicalRequest.Student?.FullName ?? "N/A",
+                        StudentClass = a.MedicalRequest.Student?.SchoolClass?.ClassName ?? "N/A",
+                        MedicationName = a.MedicalRequest.MedicationName,
+                        Form = a.MedicalRequest.Form,
+                        Route = a.MedicalRequest.Route,
+                        PlannedDosage = a.MedicalRequest.Dosage,
+                        ActualDoseGiven = a.DoseGiven ?? "N/A",
+                        ScheduledTime = scheduledDateTime,
+                        CompletedAt = a.AdministeredAt,
+                        WasTaken = a.WasTaken,
+                        Notes = a.Notes,
+                        AdministratorId = a.AdministeredBy ?? "N/A",
+                        AdministratorName = a.Administrator?.FullName ?? "N/A",
+                        Status = a.WasTaken ? "Success" : "Failed",
+                        TimeDifference = timeDifference
+                    };
+                }).ToList();
+
+                // Tính toán thống kê
+                int totalCompleted = completedAdministrations.Count;
+                int successfulAdministrations = completedAdministrations.Count(a => a.WasTaken);
+                int failedAdministrations = totalCompleted - successfulAdministrations;
+                double successRate = totalCompleted > 0 ? (double)successfulAdministrations / totalCompleted * 100 : 0;
+
+                return new DailyCompletedMedicationSummary
+                {
+                    Date = targetDate,
+                    TotalScheduled = totalScheduled,
+                    TotalCompleted = totalCompleted,
+                    SuccessfulAdministrations = successfulAdministrations,
+                    FailedAdministrations = failedAdministrations,
+                    SuccessRate = Math.Round(successRate, 2),
+                    CompletedAdministrations = completedHistoryList
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"An error occurred while retrieving completed medication history: {ex.Message}");
+            }
+        }
+
+        public async Task<DailyCompletedMedicationSummary> GetTodayCompletedMedicationHistoryAsync()
+        {
+            return await GetCompletedMedicationHistoryAsync(DateTime.Today);
+        }
     }
 }

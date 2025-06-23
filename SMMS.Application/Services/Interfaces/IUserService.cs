@@ -21,6 +21,7 @@ namespace SMMS.Application.Services.Interfaces
 		Task<List<StudentResponse>> GetMyStudentsAsync(string parentId);
 		Task<List<StudentResponse>> GetAllStudentsAsync();
 		Task<StudentResponse> GetStudentByIdAsync(string id);
+		Task<StudentResponse> GetStudentByStudentCodeAsync(string studentCode);
 		Task<bool> CreateStudentAsync(string parentId, StudentRequest request);
 		Task<bool> UpdateStudentAsync(string studentId, string userId, StudentRequest request);
 		Task<bool> DeleteStudentAsync(string studentId, string userId);
@@ -28,5 +29,6 @@ namespace SMMS.Application.Services.Interfaces
 
 		//Parent Features
 		Task<List<ParentResponse>> GetAllParentsAsync();
+		Task<ParentResponse> GetParentByStudentIdAsync(string studentId);
 	}
 }

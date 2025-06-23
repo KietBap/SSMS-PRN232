@@ -6,5 +6,6 @@
         public string Type { get; set; }
         public string Description { get; set; }
         public DateTime IncidentDate { get; set; }
+        public List<MedicalUsageDetail>? MedicalUsageDetails { get; set; }
     }
 }

@@ -16,6 +16,7 @@ namespace SMMS.Application.DataObject.ResponseObject
 		public DateTime ScheduleTime { get; set; }
 		public string? ResponsibleUserId { get; set; }
 		public string? ResponsibleUserName { get; set; }
+		public string? Description { get; set; }
 
 	}
 }

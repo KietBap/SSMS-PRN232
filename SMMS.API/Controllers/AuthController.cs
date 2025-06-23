@@ -16,32 +16,6 @@ namespace SMMS.API.Controllers
 			_authService = authService;
 		}
 
-		[HttpPost("parent/send-otp")]
-		public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
-		{
-			if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-			{
-				return BadRequest("Phone number is required.");
-			}
-			await _authService.SendOtpAsync(request.PhoneNumber);
-			return Ok("OTP sent");
-		}
-
-		[HttpPost("parent/verify-otp")]
-		public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
-		{
-			if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-			{
-				return BadRequest("Phone number is required.");
-			}
-			if (string.IsNullOrWhiteSpace(request.Otp))
-			{
-				return BadRequest("OTP is required.");
-			}
-			var response = await _authService.VerifyOtpAsync(request.PhoneNumber, request.Otp);
-			return Ok(response);
-		}
-
 		[HttpPost("login")]
 		[AllowAnonymous]
 		public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -73,5 +47,6 @@ namespace SMMS.API.Controllers
 
             return Ok(checker);
         }
+
     }
 }

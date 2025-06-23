@@ -11,12 +11,12 @@ namespace SMMS.Infrastructure.Implements
 		private IClassRepository _classRepository;
 		private IConselingRepository _conselingRepository;
 		private IConsentRepository _consentRepository;
-		private IDocumentRepository _documentRepository;
 		private IHealthActivityRepository _healthActivityRepository;
 		private IHealthCheckupRepository _healthCheckupRepository;
 		private IHealthProfileRepository _healthProfileRepository;
 		private IMedicalIncidentRepository _medicalIncidentRepository;
 		private IMedicalRequestRepository _medicalRequestRepository;
+		private IMedicationRequestAdministrationRepository _medicationRequestAdministrationRepository;
 		private IMedicalStockRepository _medicalStockRepository;
 		private IMedicalUsageRepository _medicalUsageRepository;
 		private INotificationRepository _notificationRepository;
@@ -25,7 +25,6 @@ namespace SMMS.Infrastructure.Implements
 		private IUserRepository _userRepository;
 		private IVaccinationCampaignRepository _vaccinationCampaignRepository;
 		private IVaccinationRecordRepository _vaccinationRecordRepository;
-		private IOtpRepository _otpRepository;
 
 
 		public RepositoryManager(DatabaseContext context)
@@ -37,12 +36,12 @@ namespace SMMS.Infrastructure.Implements
 			_classRepository = new ClassRepository(context);
 			_conselingRepository = new ConselingRepository(context);
 			_consentRepository = new ConsentRepository(context);
-			_documentRepository = new DocumentRepository(context);
 			_healthActivityRepository = new HealthActivityRepository(context);
 			_healthCheckupRepository = new HealthCheckupRepository(context);
 			_healthProfileRepository = new HealthProfileRepository(context);
 			_medicalIncidentRepository = new MedicalIncidentRepository(context);
 			_medicalRequestRepository = new MedicalRequestRepository(context);
+			_medicationRequestAdministrationRepository = new MedicationRequestAdministrationRepository(context);
 			_medicalStockRepository = new MedicalStockRepository(context);
 			_medicalUsageRepository = new MedicalUsageRepository(context);
 			_notificationRepository = new NotificationRepository(context);
@@ -50,7 +49,6 @@ namespace SMMS.Infrastructure.Implements
 			_studentRepository = new StudentRepository(context);
 			_vaccinationCampaignRepository = new VaccinationCampaignRepository(context);
 			_vaccinationRecordRepository = new VaccinationRecordRepository(context);
-			_otpRepository = new OtpRepository(_context);
 		}
 
 		public IUserRepository UserRepository { get { return _userRepository; } }
@@ -63,8 +61,6 @@ namespace SMMS.Infrastructure.Implements
 
 		public IConsentRepository ConsentRepository { get { return _consentRepository; } }
 
-		public IDocumentRepository DocumentRepository { get { return _documentRepository; } }
-
 		public IHealthActivityRepository HealthActivityRepository { get { return _healthActivityRepository; } }
 
 		public IHealthCheckupRepository HealthCheckRepository { get { return _healthCheckupRepository; } }
@@ -74,6 +70,8 @@ namespace SMMS.Infrastructure.Implements
 		public IMedicalIncidentRepository MedicalIncidentRepository { get { return _medicalIncidentRepository; } }
 
 		public IMedicalRequestRepository MedicalRequestRepository { get { return _medicalRequestRepository; } }
+
+		public IMedicationRequestAdministrationRepository MedicationRequestAdministrationRepository { get { return _medicationRequestAdministrationRepository; } }
 
 		public IMedicalStockRepository MedicalStockRepository { get { return _medicalStockRepository; } }
 
@@ -88,8 +86,6 @@ namespace SMMS.Infrastructure.Implements
 		public IVaccinationCampaignRepository VaccinationCampaignRepository { get { return _vaccinationCampaignRepository; } }
 
 		public IVaccinationRecordRepository VaccinationRecordRepository { get { return _vaccinationRecordRepository; } }
-
-		public IOtpRepository OtpRepository { get { return _otpRepository; } }
 
 		public Task SaveAsync() => _context.SaveChangesAsync();
 	}

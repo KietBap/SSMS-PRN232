@@ -1,6 +1,7 @@
 ﻿using SMMS.Domain.Base;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using SMMS.Domain.Enum;
 
 namespace SMMS.Domain.Entity
 {
@@ -32,6 +33,6 @@ namespace SMMS.Domain.Entity
 
         public string Note { get; set; }
         public DateTime MeetingDate { get; set; }
-        public bool Status { get; set; }
+        public ApprovalStatus Status { get; set; }
     }
 }

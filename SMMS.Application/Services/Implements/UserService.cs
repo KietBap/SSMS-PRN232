@@ -192,7 +192,8 @@ namespace SMMS.Application.Services.Implements
 							AbnormalNote = hcr.AbnormalNote,
 							Time = hcr.RecordDate,
 							RecordDate = hcr.RecordDate,
-							IsLatest = hcr.IsLatest
+							IsLatest = hcr.IsLatest,
+							CheckingStatus = hcr.CheckingStatus
 						}).ToList()
 				}).ToList());
 
@@ -250,7 +251,8 @@ namespace SMMS.Application.Services.Implements
 							AbnormalNote = hcr.AbnormalNote,
 							Time = hcr.RecordDate,
 							RecordDate = hcr.RecordDate,
-							IsLatest = hcr.IsLatest
+							IsLatest = hcr.IsLatest,
+							CheckingStatus = hcr.CheckingStatus
 						}).ToList()
 				}).ToList());
 
@@ -308,7 +310,8 @@ namespace SMMS.Application.Services.Implements
 							AbnormalNote = hcr.AbnormalNote,
 							Time = hcr.RecordDate,
 							RecordDate = hcr.RecordDate,
-							IsLatest = hcr.IsLatest
+							IsLatest = hcr.IsLatest,
+							CheckingStatus = hcr.CheckingStatus
 						}).ToList()
 				}).FirstOrDefaultAsync();
 
@@ -379,7 +382,7 @@ namespace SMMS.Application.Services.Implements
 			student.LastUpdatedBy = userId;
 			student.LastUpdatedTime = DateTimeOffset.UtcNow;
 
-			_repositoryManager.StudentRepository.Update(student);
+			//_repositoryManager.StudentRepository.Update(student);
 			await _repositoryManager.SaveAsync();
 			return true;
 		}
@@ -486,6 +489,100 @@ namespace SMMS.Application.Services.Implements
 					}).ToList()
 				})
 				.ToListAsync();
+		}
+
+		public async Task<ParentResponse> GetParentByStudentIdAsync(string studentId)
+		{
+			var parent = await _repositoryManager.StudentRepository
+				.FindByCondition(s => s.Id == studentId && s.DeletedTime == null, false)
+				.Include(s => s.Parent)
+				.ThenInclude(p => p.Students.Where(st => st.DeletedTime == null))
+				.Select(s => new ParentResponse
+				{
+					Id = s.Parent.Id,
+					Email = s.Parent.Email,
+					Phone = s.Parent.Phone,
+					FullName = s.Parent.FullName,
+					RoleName = s.Parent.Role.RoleName,
+					ImageUrl = s.Parent.Image,
+					Students = s.Parent.Students.Select(st => new StudentResponse
+					{
+						Id = st.Id,
+						FullName = st.FullName,
+						Gender = st.Gender,
+						DateOfBirth = st.DateOfBirth,
+						ClassId = st.ClassId,
+						StudentClass = st.SchoolClass != null ? new SchoolClassResponse
+						{
+							Id = st.SchoolClass.Id,
+							ClassName = st.SchoolClass.ClassName,
+							ClassRoom = st.SchoolClass.ClassRoom,
+							Quantity = st.SchoolClass.Quantity
+						} : null,
+						Image = st.Image
+					}).ToList()
+				}).FirstOrDefaultAsync();
+
+			return parent ?? throw new Exception("Parent not found for the given student ID.");
+		}
+
+		public async Task<StudentResponse> GetStudentByStudentCodeAsync(string studentCode)
+		{
+			var student = await _repositoryManager.StudentRepository
+				.FindByCondition(s => s.StudentCode == studentCode && s.DeletedTime == null, false)
+				.Include(s => s.SchoolClass)
+				.Include(s => s.HealthProfiles)
+				.Include(s => s.HealthCheckupRecords)
+				.Select(s => new StudentResponse
+				{
+					Id = s.Id,
+					StudentCode = s.StudentCode,
+					FullName = s.FullName,
+					Gender = s.Gender,
+					DateOfBirth = s.DateOfBirth,
+					ClassId = s.ClassId,
+					StudentClass = s.SchoolClass != null ? new SchoolClassResponse
+					{
+						Id = s.SchoolClass.Id,
+						ClassName = s.SchoolClass.ClassName,
+						ClassRoom = s.SchoolClass.ClassRoom,
+						Quantity = s.SchoolClass.Quantity
+					} : null,
+					Image = s.Image,
+					HealthProfile = s.HealthProfiles
+						.Where(hp => hp.DeletedTime == null)
+						.Select(hp => new HealthProfileResponse
+						{
+							Id = hp.Id,
+							StudentId = hp.StudentId,
+							Vision = hp.Vision,
+							Hearing = hp.Hearing,
+							Dental = hp.Dental,
+							BMI = hp.BMI,
+							AbnormalNote = hp.AbnormalNote,
+							VaccinationHistory = hp.VaccinationHistory
+						}).FirstOrDefault(),
+					HealthCheckupRecords = s.HealthCheckupRecords
+						.Where(hcr => hcr.DeletedTime == null)
+						.Select(hcr => new HealthCheckUpResponse
+						{
+							HealthActivityId = hcr.HealthActivityId,
+							StudentId = hcr.StudentId,
+							StudentName = hcr.Student.FullName,
+							NurseId = hcr.LastUpdatedBy,
+							Vision = hcr.Vision,
+							Hearing = hcr.Hearing,
+							Dental = hcr.Dental,
+							BMI = hcr.BMI,
+							AbnormalNote = hcr.AbnormalNote,
+							Time = hcr.RecordDate,
+							RecordDate = hcr.RecordDate,
+							IsLatest = hcr.IsLatest,
+							CheckingStatus = hcr.CheckingStatus
+						}).ToList()
+				}).FirstOrDefaultAsync();
+
+			return student;
 		}
 	}
 }

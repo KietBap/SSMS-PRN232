@@ -6,6 +6,10 @@ namespace SMMS.Domain.Entity
 {
     public class MedicalRequest : BaseEntity
     {
+        public MedicalRequest()
+        {
+            MedicationRequestAdministrations = new HashSet<MedicationRequestAdministration>();
+        }
         [Required]
         public string StudentId { get; set; }
 
@@ -24,14 +28,45 @@ namespace SMMS.Domain.Entity
         [ForeignKey("UserId")]
         public virtual User User { get; set; }
 
-        public string MedicalName { get; set; }
-        public string Status { get; set; }
-        public DateTime StartTime { get; set; }
-        public DateTime EndTime { get; set; }
-        public int Quantity { get; set; }
-        public string Dosage { get; set; }
+        // Thông tin phụ huynh
+        [Required]
+        public string ParentName { get; set; }
+
+        [Required]
+        public string PhoneNumber { get; set; }
+
+        // Thông tin thuốc
+        [Required]
+        public string MedicationName { get; set; }
+
+        [Required]
+        public string Form { get; set; } // Tablet, Syrup, EyeDrop, Cream
+
+        [Required]
+        public string Dosage { get; set; } // 2 viên/lần, 200ml/lần
+
+        [Required]
+        public string Route { get; set; } // Uống, chích, ngậm
+
+        public int Frequency { get; set; } // 2 lần/ngày
+
+        // Số lượng thuốc
+        public int TotalQuantity { get; set; }
+        public int RemainingQuantity { get; set; }
+
+        // Thời gian cho thuốc
+        [Required]
+        public string TimeToAdminister { get; set; } // JSON string: ["07:00","11:00","19:00"]
+
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+
         public string? Notes { get; set; }
-        public DateTime? LastCompletedDate { get; set; }
-        public bool IsCompletedToday { get; set; }
+
+        [Required]
+        public string Status { get; set; } = "Active";
+
+        // Navigation property
+        public virtual ICollection<MedicationRequestAdministration> MedicationRequestAdministrations { get; set; }
     }
 }

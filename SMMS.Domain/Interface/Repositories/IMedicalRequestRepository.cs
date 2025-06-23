@@ -1,8 +1,8 @@
-﻿using SMMS.Domain.Entity;
+using SMMS.Domain.Entity;
 
 namespace SMMS.Domain.Interface.Repositories
 {
-	public interface IMedicalRequestRepository : IRepositoryBase<MedicalRequest>
-	{
-	}
+    public interface IMedicalRequestRepository : IRepositoryBase<MedicalRequest>
+    {
+    }
 }

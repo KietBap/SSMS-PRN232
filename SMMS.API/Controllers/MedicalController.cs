@@ -136,18 +136,6 @@ namespace SMMS.API.Controllers
 
         //---------------Medical Usage----------------
 
-        [HttpPost("usage")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> CreateMedicalUsage([FromBody] CreateMedicalUsageRequest request)
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var result = await _medicalService.CreateMedicalUsageAsync(userId, request);
-            if (!result)
-                return BadRequest("Failed to create medical usage.");
-
-            return Ok("MedicalUsage created successfully.");
-        }
-
         [HttpDelete("usage/{id}")]
         [Authorize(Roles = "Admin,Manager,Nurse")]
         public async Task<IActionResult> DeleteMedicalUsage(string id)
@@ -167,7 +155,6 @@ namespace SMMS.API.Controllers
             if (!result) return BadRequest("Failed to update medical usage.");
             return Ok("MedicalUsage updated successfully.");
         }
-
 
         //---------------Medical Request----------------
 
@@ -192,7 +179,7 @@ namespace SMMS.API.Controllers
         }
 
         [HttpGet("request/{id}")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
+        [Authorize(Roles = "Admin,Manager,Nurse,Parent")]
         public async Task<IActionResult> GetMedicalRequestById(string id)
         {
             var result = await _medicalService.GetMedicalRequestByIdAsync(id);
@@ -201,12 +188,40 @@ namespace SMMS.API.Controllers
 
         [HttpPut("request/{id}")]
         [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> UpdateMedicalRequest(string id, UpdateMedicalRequestRequest request)
+        public async Task<IActionResult> UpdateMedicalRequest(string id, [FromBody] UpdateMedicalRequestRequest request)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var result = await _medicalService.UpdateMedicalRequestAsync(id, request, userId);
-            if (!result) return BadRequest("Failed to update medical request.");
-            return Ok("Medical request updated successfully.");
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized("User not authenticated.");
+                }
+
+                var result = await _medicalService.UpdateMedicalRequestAsync(id, request, userId);
+                return Ok(new {
+                    success = true,
+                    message = "Medical request updated successfully.",
+                    data = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "An error occurred while updating the medical request." });
+            }
         }
 
         [HttpDelete("request/{id}")]
@@ -219,89 +234,97 @@ namespace SMMS.API.Controllers
             return Ok("Medical request deleted successfully.");
         }
 
-        [HttpGet("request/daily/{date}")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> GetDailyMedicalRequests(DateTime date)
-        {
-            var result = await _medicalService.GetDailyMedicalRequestsAsync(date);
-            return Ok(result);
-        }
-
-        [HttpGet("request/daily/today")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> GetTodayMedicalRequests()
-        {
-            var result = await _medicalService.GetDailyMedicalRequestsAsync(DateTime.Today);
-            return Ok(result);
-        }
-
-        [HttpPut("request/{id}/complete")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> CompleteMedicalRequest(string id)
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var result = await _medicalService.CompleteMedicalRequestAsync(id, userId);
-            if (!result) return BadRequest("Failed to complete medical request.");
-            return Ok("Medical request completed successfully.");
-        }
-
-        [HttpPut("request/{id}/status")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> UpdateMedicalRequestStatus(string id, UpdateMedicalRequestStatusRequest request)
-        {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            var result = await _medicalService.UpdateMedicalRequestStatusAsync(id, request.Status, userId);
-            if (!result) return BadRequest("Failed to update medical request status.");
-            return Ok("Medical request status updated successfully.");
-        }
-
         [HttpGet("request/student/{studentId}")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
+        [Authorize(Roles = "Admin,Manager,Nurse,Parent")]
         public async Task<IActionResult> GetMedicalRequestsByStudent(string studentId)
         {
             var result = await _medicalService.GetMedicalRequestsByStudentAsync(studentId);
             return Ok(result);
         }
 
-        [HttpGet("request/status/{status}")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> GetMedicalRequestsByStatus(string status)
+        [HttpGet("request/parent/{parentId}")]
+        [Authorize(Roles = "Admin,Manager,Nurse,Parent")]
+        public async Task<IActionResult> GetMedicalRequestsByParent(string parentId)
         {
-            var result = await _medicalService.GetMedicalRequestsByStatusAsync(status);
+            var result = await _medicalService.GetMedicalRequestsByParentAsync(parentId);
             return Ok(result);
+        }
+
+        [HttpGet("request/daily/{date}")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> GetDailyMedicationSchedule(DateTime date)
+        {
+            var result = await _medicalService.GetDailyMedicationScheduleAsync(date);
+            return Ok(result);
+        }
+
+        [HttpGet("request/daily/today")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> GetTodayMedicationSchedule()
+        {
+            var result = await _medicalService.GetDailyMedicationScheduleAsync(DateTime.Today);
+            return Ok(result);
+        }
+
+        [HttpPost("request/administration")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> RecordMedicationAdministration([FromBody] RecordMedicationAdministrationRequest request)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var result = await _medicalService.RecordMedicationAdministrationAsync(userId, request);
+            if (!result) return BadRequest("Failed to record medication administration.");
+            return Ok("Medication administration recorded successfully.");
+        }
+
+        [HttpGet("request/history/completed/{date}")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> GetCompletedMedicationHistory(DateTime date)
+        {
+            try
+            {
+                var result = await _medicalService.GetCompletedMedicationHistoryAsync(date);
+                return Ok(new {
+                    success = true,
+                    message = "Completed medication history retrieved successfully.",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving completed medication history." });
+            }
+        }
+
+        [HttpGet("request/history/completed/today")]
+        [Authorize(Roles = "Admin,Manager,Nurse")]
+        public async Task<IActionResult> GetTodayCompletedMedicationHistory()
+        {
+            try
+            {
+                var result = await _medicalService.GetTodayCompletedMedicationHistoryAsync();
+                return Ok(new {
+                    success = true,
+                    message = "Today's completed medication history retrieved successfully.",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving today's completed medication history." });
+            }
         }
 
         [HttpGet("request/search")]
         [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> SearchMedicalRequests([FromQuery] string? medicalName, [FromQuery] string? studentId, [FromQuery] DateTime? date, [FromQuery] string? status)
+        public async Task<IActionResult> SearchMedicalRequests(
+            [FromQuery] string? medicationName,
+            [FromQuery] string? studentId,
+            [FromQuery] DateTime? date,
+            [FromQuery] string? status)
         {
-            var result = await _medicalService.SearchMedicalRequestsAsync(medicalName, studentId, date, status);
+            var result = await _medicalService.SearchMedicalRequestsAsync(medicationName, studentId, date, status);
             return Ok(result);
         }
 
-        [HttpPost("request/reset-daily-completion")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> ResetDailyCompletionStatus()
-        {
-            var result = await _medicalService.ResetDailyCompletionStatusAsync();
-            if (!result) return BadRequest("Failed to reset daily completion status.");
-            return Ok("Daily completion status reset successfully.");
-        }
-
-        [HttpGet("request/completion-status/{date}")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> GetCompletionStatusByDate(DateTime date)
-        {
-            var result = await _medicalService.GetCompletionStatusByDateAsync(date);
-            return Ok(result);
-        }
-
-        [HttpGet("request/completion-status/today")]
-        [Authorize(Roles = "Admin,Manager,Nurse")]
-        public async Task<IActionResult> GetTodayCompletionStatus()
-        {
-            var result = await _medicalService.GetCompletionStatusByDateAsync(DateTime.Today);
-            return Ok(result);
-        }
     }
 }

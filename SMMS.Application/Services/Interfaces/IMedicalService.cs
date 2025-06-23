@@ -23,26 +23,24 @@ namespace SMMS.Application.Services.Interfaces
         Task<bool> UpdateIncidentStatusAsync(string id, MedicalIncidentStatus status, string userId);
 
 
-        //---------------Medical Usage----------------
-        Task<bool> CreateMedicalUsageAsync(string userId, CreateMedicalUsageRequest request);
-        Task<bool> DeleteMedicalUsageAsync(string id, string userId);
-        Task<bool> UpdateMedicalUsageAsync(string id, UpdateMedicalUsageRequest model, string userId);
-
-
         //---------------Medical Request----------------
         Task<bool> CreateMedicalRequestAsync(string userId, CreateMedicalRequestRequest request);
         Task<List<ListMedicalRequestResponse>> GetAllMedicalRequestsAsync();
         Task<MedicalRequestResponse> GetMedicalRequestByIdAsync(string id);
-        Task<bool> UpdateMedicalRequestAsync(string id, UpdateMedicalRequestRequest request, string userId);
+        Task<MedicalRequestResponse> UpdateMedicalRequestAsync(string id, UpdateMedicalRequestRequest request, string userId);
         Task<bool> DeleteMedicalRequestAsync(string id, string userId);
-        Task<List<DailyMedicalRequestResponse>> GetDailyMedicalRequestsAsync(DateTime date);
-        Task<bool> CompleteMedicalRequestAsync(string id, string userId);
-        Task<bool> UpdateMedicalRequestStatusAsync(string id, string status, string userId);
         Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByStudentAsync(string studentId);
-        Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByStatusAsync(string status);
-        Task<List<ListMedicalRequestResponse>> SearchMedicalRequestsAsync(string? medicalName, string? studentId, DateTime? date, string? status);
-        Task<bool> ResetDailyCompletionStatusAsync();
-        Task<object> GetCompletionStatusByDateAsync(DateTime date);
+        Task<List<ListMedicalRequestResponse>> GetMedicalRequestsByParentAsync(string parentId);
+        Task<List<DailyMedicationScheduleResponse>> GetDailyMedicationScheduleAsync(DateTime date);
+        Task<bool> RecordMedicationAdministrationAsync(string userId, RecordMedicationAdministrationRequest request);
+        Task<DailyCompletedMedicationSummary> GetCompletedMedicationHistoryAsync(DateTime date);
+        Task<DailyCompletedMedicationSummary> GetTodayCompletedMedicationHistoryAsync();
+        Task<List<ListMedicalRequestResponse>> SearchMedicalRequestsAsync(string? medicationName, string? studentId, DateTime? date, string? status);
+
+
+        //---------------Medical Usage----------------
+        Task<bool> DeleteMedicalUsageAsync(string id, string userId);
+        Task<bool> UpdateMedicalUsageAsync(string id, UpdateMedicalUsageRequest model, string userId);
 
     }
 }

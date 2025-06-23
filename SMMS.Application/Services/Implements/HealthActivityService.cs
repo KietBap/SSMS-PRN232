@@ -8,16 +8,19 @@ using SMMS.Application.Services.Interfaces;
 using SMMS.Domain.Entity;
 using SMMS.Domain.Enum;
 using SMMS.Domain.Interface.Repositories;
+using SMMS.Infrastructure.Implements;
 
 namespace SMMS.Application.Services.Implements
 {
 	public class HealthActivityService : IHealthActivityService
 	{
 		private readonly IRepositoryManager _repositoryManager;
+		private readonly INotificationService _notificationService;
 
-		public HealthActivityService(IRepositoryManager repositoryManager)
+		public HealthActivityService(IRepositoryManager repositoryManager, INotificationService notificationService)
 		{
 			_repositoryManager = repositoryManager;
+			_notificationService = notificationService;
 		}
 
 		public async Task<HealthActivityResponse> CreateHealthActivityAsync(HealthActivityRequest request, string nurseId)
@@ -50,6 +53,22 @@ namespace SMMS.Application.Services.Implements
 			};
 			_repositoryManager.HealthActivityRepository.Create(healthActivity);
 			await _repositoryManager.SaveAsync();
+
+			//Notification for Admin/////////////////////////////////////////////////////////
+			var admins = await _repositoryManager.UserRepository
+			.FindByCondition(u => u.Role.RoleName == "Admin" && u.DeletedTime == null, false)
+			.ToListAsync();
+			foreach (var admin in admins)
+			{
+				await _notificationService.CreateNotificationAsync(
+					admin.Id,
+					"New Health Activity Needs Approval",
+					$"Activity: {healthActivity.Name} created by Nurse requires your approval.",
+					healthActivity.Id
+				);
+			}
+			////////////////////////////////////////////////////////////////////////////////
+			
 			return new HealthActivityResponse
 			{
 				Id = healthActivity.Id,
@@ -66,9 +85,9 @@ namespace SMMS.Application.Services.Implements
 		private async Task CreateActivityConsentsAsync(HealthActivity healthActivity)
 		{
 			var classIds = healthActivity.HealthActivityClasses.Select(hac => hac.SchoolClassId).ToList();
-			var students = await Task.Run(() => _repositoryManager.StudentRepository
-				.FindByCondition(s => classIds.Contains(s.ClassId) && s.DeletedTime == null, false)
-				.ToList());
+			var students = await _repositoryManager.StudentRepository
+			   .FindByCondition(s => classIds.Contains(s.ClassId) && s.DeletedTime == null, false)
+			   .ToListAsync();
 
 			foreach (var student in students)
 			{
@@ -79,15 +98,24 @@ namespace SMMS.Application.Services.Implements
 					HealthActivityId = healthActivity.Id,
 					VaccinationCampaignId = null,
 					Status = ApprovalStatus.Pending,
-					Comments = "none",
+					Comments = healthActivity.Description,
 					ScheduleTime = healthActivity.ScheduledDate,
 					CreatedBy = "System",
 					CreatedTime = DateTimeOffset.UtcNow,
 					ActivityType = "HealthActivity"
 				};
 				_repositoryManager.ConsentRepository.Create(consent);
+				await _repositoryManager.SaveAsync();
+
+				// Create notification for each consent/////////////////////////////////////
+				await _notificationService.CreateNotificationAsync(
+					student.ParentId,
+							"New Health Activity for Your Child",
+							$"Activity: {healthActivity.Name} for your child: {student.FullName}. Please confirm participation.",
+					consent.Id
+
+				);
 			}
-			await _repositoryManager.SaveAsync();
 		}
 
 		public async Task<List<HealthActivityResponse>> GetPendingHealthActivitiesAsync()
@@ -159,6 +187,14 @@ namespace SMMS.Application.Services.Implements
 			{
 				healthActivity.Status = ApprovalStatus.Approved;
 				await CreateActivityConsentsAsync(healthActivity);
+
+				// Notify Nurse////////////////////////
+				await _notificationService.CreateNotificationAsync(
+					healthActivity.UserId,
+					"Health Activity Approved",
+					$"Your activity: {healthActivity.Name} has been approved.",
+					healthActivity.Id
+				);
 			}
 			else if (action == "reject")
 			{
@@ -180,7 +216,7 @@ namespace SMMS.Application.Services.Implements
 		{
 			var activity = _repositoryManager.HealthActivityRepository
 				.FindByCondition(ha => ha.Id == healthActivityId 
-					&& ha.Status != ApprovalStatus.Approved || ha.Status != ApprovalStatus.Pending, true)
+					&& ha.Status == ApprovalStatus.Pending, true)
 				.FirstOrDefault();
 			if (activity == null) return false;
 
@@ -204,7 +240,7 @@ namespace SMMS.Application.Services.Implements
 		public async Task<bool> DeleteHealthActivityAsync(string healthActivityId, string userId)
 		{
 			var activity = _repositoryManager.HealthActivityRepository
-				.FindByCondition(ha => ha.Id == healthActivityId && ha.Status == ApprovalStatus.Pending, true)
+				.FindByCondition(ha => ha.Id == healthActivityId && ha.Status == ApprovalStatus.Pending || ha.Status == ApprovalStatus.Rejected, true)
 				.FirstOrDefault();
 			if (activity == null) return false;
 			
@@ -214,13 +250,11 @@ namespace SMMS.Application.Services.Implements
 			{
 				return false;
 			}
-
 			activity.DeletedBy = userId;
 			activity.DeletedTime = DateTimeOffset.UtcNow;
 			_repositoryManager.HealthActivityRepository.Update(activity);
 			await _repositoryManager.SaveAsync();
 			return true;
-		}
-		
+		}	
 	}
 }
